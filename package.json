@@ -4,7 +4,9 @@
   "description": "lets many buyers pool their orders together to buy goods in bulk. This acts like a wholesale buying club. The larger order size unlocks big discounts. This lowers costs for everyone",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "npx tsc",
+    "start": "node ./dist/app.js",
+    "dev": "ts-node-dev --files --respawn src/server.ts"
   },
   "repository": {
     "type": "git",
@@ -17,5 +19,18 @@
   "bugs": {
     "url": "https://github.com/Abdulaziz-algharbi/order-pools-backend/issues"
   },
-  "homepage": "https://github.com/Abdulaziz-algharbi/order-pools-backend#readme"
+  "homepage": "https://github.com/Abdulaziz-algharbi/order-pools-backend#readme",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "mongoose": "^9.7.4"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.1.1",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^6.0.2"
+  }
 }

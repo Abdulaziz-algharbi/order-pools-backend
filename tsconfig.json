@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "typeRoots": ["./node_modules/@types", "./src/types"],
+    "target": "ES2020",
+    "module": "commonjs",
+    "outDir": "./dist",
+    "rootDir": "./",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "emitDeclarationOnly": false,
+    "noEmit": false,
+    "checkJs": false,
+    "allowJs": true,
+    "types": ["node", "jest"]
+  },
+  "include": ["src/**/*", "tests/**/*.ts", "**/*.test.ts", "**/*.spec.ts"],
+  "exclude": ["node_modules"]
+}
