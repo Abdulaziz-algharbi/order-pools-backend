@@ -26,12 +26,14 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "mongoose": "^9.7.4"
+    "mongoose": "^9.7.4",
+    "morgan": "^1.11.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
+    "@types/morgan": "^1.9.10",
     "@types/node": "^26.1.1",
     "eslint": "^10.7.0",
     "eslint-config-prettier": "^10.1.8",

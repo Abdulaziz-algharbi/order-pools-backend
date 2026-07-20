@@ -1,0 +1,22 @@
+@baseUrl=http://localhost:8000/api/v1/users
+
+### create user
+POST {{baseUrl}}
+Content-Type: application/json
+
+{
+  "firstName": "TEST",
+  "lastName": "CHECKER",
+  "email": "test@test.test",
+  "phoneNumber": "1234567890",
+  "companyName": "TEST COMPANY",
+  "password": "testpassword"
+}
+
+
+  #  firstName: { type: String, required: true },
+  #   lastName: { type: String, required: true },
+  #   email: { type: String, required: true, unique: true },
+  #   phoneNumber: { type: String, required: true },
+  #   companyName: { type: String, required: true },
+  #   password: { type: String, required: true }, // hashed sha256
