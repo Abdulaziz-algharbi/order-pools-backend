@@ -1,4 +1,4 @@
-import app from "./app";
+import app from './app';
 
 function startServer(port: string | number) {
   return app.listen(port, function () {
