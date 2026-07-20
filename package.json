@@ -1,0 +1,21 @@
+{
+  "name": "order-pools-backend",
+  "version": "1.0.0",
+  "description": "lets many buyers pool their orders together to buy goods in bulk. This acts like a wholesale buying club. The larger order size unlocks big discounts. This lowers costs for everyone",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Abdulaziz-algharbi/order-pools-backend.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Abdulaziz-algharbi/order-pools-backend/issues"
+  },
+  "homepage": "https://github.com/Abdulaziz-algharbi/order-pools-backend#readme"
+}
