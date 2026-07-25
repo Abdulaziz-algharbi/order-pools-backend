@@ -7,7 +7,7 @@
     "build": "npx tsc",
     "start": "node ./dist/app.js",
     "dev": "ts-node-dev --files --respawn src/server.ts",
-    "prepare": "husky",
+    "prepare": "npx husky",
     "lint-staged": "lint-staged"
   },
   "repository": {

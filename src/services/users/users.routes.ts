@@ -12,7 +12,7 @@ router
 router
   .route('/:_id')
   .get(usersController.getById.bind(usersController))
-  .put(usersController.update.bind(usersController))
+  .patch(usersController.update.bind(usersController))
   .delete(usersController.delete.bind(usersController));
 
 export default router;
