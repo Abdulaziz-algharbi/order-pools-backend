@@ -6,10 +6,12 @@ import config from '../../config/config';
 class BaseController {
   model: Model<any>;
   config: typeof config;
+  allowedFields: Array<string>;
 
-  constructor(model: Model<any>) {
+  constructor(model: Model<any>, allowedFields: Array<string>) {
     this.model = model;
     this.config = config;
+    this.allowedFields = allowedFields;
   }
 
   async create(req: Request, res: Response): Promise<void> {
@@ -70,10 +72,9 @@ class BaseController {
         });
         return;
       }
-      const allowedFields = ['firstName', 'lastName', 'email'];
       const data = req.body;
       for (const field of Object.keys(data)) {
-        if (allowedFields.includes(field)) {
+        if (this.allowedFields.includes(field)) {
           doc[field] = data[field];
         }
       }

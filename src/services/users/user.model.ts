@@ -1,4 +1,5 @@
 import { model, Schema, Document } from 'mongoose';
+import bcrypt from 'bcrypt';
 
 export interface IUser extends Document {
   firstName: string;
@@ -48,35 +49,27 @@ const userSchema = new Schema<IUser>(
   }
 );
 
+export const couldBeUpdated = [
+  'firstName',
+  'lastName',
+  'email',
+  'phoneNumber',
+  'password',
+  'commercialRegistration',
+  'vatNumber',
+  'profileImage',
+];
+
 // userSchema.index({ email: 1 }, { unique: true }); // Ensure email is unique
 
-userSchema.pre('save', function () {
-  // salt and hash password here
-  // if (!this.isModified('password')) {
-  // }
+userSchema.pre('save', async function () {
+  // Only hash if the password was changed or it is a new user
+  if (!this.isModified('password')) return;
+
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password, salt);
 });
 
 const UserModel = model<IUser>('User', userSchema);
 
 export default UserModel;
-
-// User
-// PK id: int
-// firstName: string
-// lastName: string
-// email: string
-// phoneNumber: string
-// passwordHash: string
-// role: ADMIN | SUPPLIER | RETAILER
-// companyName: string
-// commercialRegistration: string
-// vatNumber: string
-// address: string
-// city: string
-// country: string
-// profileImage: byte
-// isVerified: boolean
-// status: ACTIVE | SUSPENDED | PENDING
-// createdAt: DATETIME
-// updatedAt: DATETIME
-// deletedAt: DATETIME
