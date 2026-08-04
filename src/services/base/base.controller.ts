@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
-import { Model } from 'mongoose';
+import mongoose, { Model } from 'mongoose';
 
 import config from '../../config/config';
+import logger from '../../logger/logger';
 
 class BaseController {
   model: Model<any>;
@@ -18,10 +19,17 @@ class BaseController {
     try {
       const newDoc = new this.model(req.body);
       const savedDoc = await newDoc.save();
-      res.status(201).json(savedDoc);
+      logger.info(`${this.model.modelName} created`);
+      res.status(201).send(savedDoc);
     } catch (error) {
-      console.error('Error creating document:', error);
-      res.status(500).json({ message: 'Internal server error' });
+      if (error instanceof mongoose.Error.ValidationError) {
+        res.status(400).send({
+          message: 'Validation Error',
+          errors: error.errors,
+        });
+      }
+      logger.error(`${this.model.modelName} Creation: ${error}`);
+      res.status(500).send({ message: 'Internal server error' });
     }
   }
 
@@ -30,14 +38,15 @@ class BaseController {
       // add pagination, filtering, and sorting logic here if needed
       // const q = {}
       const docs = await this.model.find();
-      res.status(200).json({
+      logger.info(`${this.model.modelName} Retrieved`);
+      res.status(200).send({
         message: 'Documents retrieved successfully',
         data: docs,
         total: docs.length,
       });
     } catch (error) {
-      console.error('Error retrieving documents:', error);
-      res.status(500).json({ message: 'Internal server error' });
+      logger.error(`Retrieving ${this.model.modelName} documents: ${error}`);
+      res.status(500).send({ message: 'Internal server error' });
     }
   }
 
@@ -45,19 +54,23 @@ class BaseController {
     try {
       const doc = await this.model.findById(req.params._id);
       if (!doc) {
-        res.status(404).json({
+        logger.error(
+          `${this.model.modelName} Specific Retrieving: Doc Not Found`
+        );
+        res.status(404).send({
           message: 'Document not Found',
           data: null,
         });
         return;
       }
-      res.status(200).json({
+      logger.info(`${this.model.modelName} ID: Retrieved`);
+      res.status(200).send({
         message: 'Document retrieved successfully',
         data: doc,
       });
     } catch (error) {
-      console.error('Error retrieving specified document:', error);
-      res.status(500).json({ message: 'Internal server error' });
+      logger.error('Retrieving specified document:', error);
+      res.status(500).send({ message: 'Internal server error' });
     }
   }
 
@@ -66,7 +79,8 @@ class BaseController {
       const doc = await this.model.findById(req.params._id);
 
       if (!doc) {
-        res.status(404).json({
+        logger.error(`${this.model.modelName} Update: Doc Not Found`);
+        res.status(404).send({
           message: 'Document not Found',
           data: null,
         });
@@ -79,12 +93,14 @@ class BaseController {
         }
       }
       await doc.save();
+      logger.info(`${this.model.modelName} Updated`);
 
-      res.status(200).json({
+      res.status(200).send({
         message: 'Document updated successfully',
         data: doc,
       });
     } catch (error) {
+      logger.error(`${this.model.modelName} Update: ${error}`);
       res.status(500).json({
         message: 'Internal server error',
         error,
@@ -97,6 +113,7 @@ class BaseController {
       const doc = await this.model.findById(req.params._id);
 
       if (!doc) {
+        logger.error(`${this.model.modelName} Delete: Doc Not Found`);
         res.status(404).json({
           message: 'Document not Found',
           data: null,
@@ -104,10 +121,13 @@ class BaseController {
         return;
       }
       await this.model.deleteOne({ _id: doc._id });
+      logger.info(`${this.model.modelName} Deleted`);
       res.status(204).json({
         message: 'Document deleted successfully',
       });
     } catch (error) {
+      logger.error(`${this.model.modelName} Delete: ${error}`);
+
       res.status(500).json({
         message: 'Internal server error',
         error,
