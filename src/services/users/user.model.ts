@@ -1,5 +1,10 @@
-import { model, Schema, Document } from 'mongoose';
+import { model, Schema, Document, Types } from 'mongoose';
 import bcrypt from 'bcrypt';
+
+// used as a reference:
+
+// eslint-disable-next-line no-unused-vars
+import Address from '../addresses/address.model';
 
 export interface IUser extends Document {
   firstName: string;
@@ -11,6 +16,7 @@ export interface IUser extends Document {
   role?: 'ADMIN' | 'SUPPLIER' | 'RETAILER';
   commercialRegistration?: string | null;
   vatNumber?: string | null;
+  addresses: Types.ObjectId[]; // id addresses and some most retrieval fields
   profileImage?: string | null; // link to the image
   isVerified?: boolean;
   status?: 'ACTIVE' | 'SUSPENDED' | 'PENDING';
@@ -34,6 +40,22 @@ const userSchema = new Schema<IUser>(
     },
     commercialRegistration: { type: String, default: null },
     vatNumber: { type: String, default: null },
+    addresses: {
+      type: [
+        {
+          type: Schema.Types.ObjectId,
+          ref: 'Address',
+          required: true,
+        },
+      ],
+      required: true,
+      validate: {
+        validator: function (addresses) {
+          return addresses.length > 0;
+        },
+        message: 'At least one address is required.',
+      },
+    },
 
     profileImage: { type: String, default: null }, // base64 encoded string
     isVerified: { type: Boolean, default: false },

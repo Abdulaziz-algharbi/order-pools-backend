@@ -1,7 +1,11 @@
-import { model, Schema, Document } from 'mongoose';
+import { model, Schema, Document, Types } from 'mongoose';
+
+// eslint-disable-next-line no-unused-vars
+import User from '../users/user.model';
 
 export interface Product extends Document {
   // Ref_ID supplier user ID
+  user_ref: Types.ObjectId;
   name: string;
   description: string;
   brand?: string;
@@ -15,6 +19,11 @@ export interface Product extends Document {
 const productSchema = new Schema<Product>(
   {
     // Ref_ID supplier user ID is required
+    user_ref: {
+      type: Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
     name: { type: String, required: true },
     description: { type: String, required: true },
     brand: { type: String, default: null },

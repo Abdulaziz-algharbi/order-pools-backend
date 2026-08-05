@@ -1,7 +1,11 @@
-import { model, Schema, Document } from 'mongoose';
+import { model, Schema, Document, Types } from 'mongoose';
+
+// eslint-disable-next-line no-unused-vars
+import Product from '../products/product.model';
 
 export interface ProductOffer extends Document {
   // Ref_ID product ID
+  product_ref: Types.ObjectId;
   wholeQuantity: number;
   price: number;
   status: 'PENDING' | 'NEGOTIATION' | 'APPROVED' | 'REJECTED';
@@ -13,6 +17,10 @@ export interface ProductOffer extends Document {
 const productOfferSchema = new Schema<ProductOffer>(
   {
     // Ref_ID product ID is required
+    product_ref: {
+      type: Types.ObjectId,
+      ref: 'Product',
+    },
     wholeQuantity: { type: Number, required: true },
     price: { type: Number, required: true },
     status: {
