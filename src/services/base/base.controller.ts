@@ -1,20 +1,32 @@
 import { Request, Response } from 'express';
 import mongoose, { Model } from 'mongoose';
+import bcrypt from 'bcrypt';
 
 import config from '../../config/config';
 import logger from '../../logger/logger';
+import appRegistry from '../../app.registry';
+import REGISTRY from '../../constants/REGISTRY';
+import jwtUtil from '../../utils/jwt.util';
 
 class BaseController {
   model: Model<any>;
   config: typeof config;
   allowedFields: Array<string>;
   logger: typeof logger;
+  registry: typeof appRegistry;
+  REGISTRY: typeof REGISTRY;
+  jwt: typeof jwtUtil;
+  hasher: typeof bcrypt;
 
   constructor(model: Model<any>, allowedFields: Array<string>) {
     this.model = model;
     this.config = config;
     this.allowedFields = allowedFields;
     this.logger = logger;
+    this.registry = appRegistry;
+    this.REGISTRY = REGISTRY;
+    this.jwt = jwtUtil;
+    this.hasher = bcrypt;
   }
 
   async create(req: Request, res: Response): Promise<void> {
@@ -56,6 +68,10 @@ class BaseController {
 
   async getById(req: Request, res: Response): Promise<void> {
     try {
+      // if(req.ref) {
+
+      // }
+
       const doc = await this.model.findById(req.params._id);
       if (!doc) {
         this.logger.error(

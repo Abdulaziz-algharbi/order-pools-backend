@@ -2,6 +2,13 @@ import jwt, { SignOptions } from 'jsonwebtoken';
 import config from '../config/config';
 import logger from '../logger/logger';
 
+declare module 'jsonwebtoken' {
+  export interface JwtPayload {
+    _id: string;
+    role: string;
+  }
+}
+
 class JwtUtil {
   createAccessToken(payload: object) {
     const secret = config.jwtTokenSecret;

@@ -42,16 +42,15 @@ const userSchema = new Schema<IUser>(
         {
           type: Schema.Types.ObjectId,
           ref: 'Address',
-          required: true,
         },
       ],
-      required: true,
-      validate: {
-        validator: function (addresses) {
-          return addresses.length > 0;
-        },
-        message: 'At least one address is required.',
-      },
+      // validate: {
+      //   validator: function (addresses) {
+      //     return addresses.length > 0;
+      //   },
+      //   message: 'At least one address is required.',
+      // },
+      default: [],
     },
 
     profileImage: { type: String, default: null }, // base64 encoded string
