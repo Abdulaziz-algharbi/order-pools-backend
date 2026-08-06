@@ -3,9 +3,6 @@ import bcrypt from 'bcrypt';
 
 // used as a reference:
 
-// eslint-disable-next-line no-unused-vars
-import Address from '../addresses/address.model';
-
 export interface IUser extends Document {
   firstName: string;
   lastName: string;
