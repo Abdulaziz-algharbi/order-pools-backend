@@ -1,8 +1,5 @@
 import { model, Schema, Document, Types } from 'mongoose';
 
-// eslint-disable-next-line no-unused-vars
-import ProductOffer from '../productOffers/productOffer.model';
-
 export interface Meeting extends Document {
   // Ref_id productOfferId
   productOffer_ref: Types.ObjectId;

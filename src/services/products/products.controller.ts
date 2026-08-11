@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import BaseController from '../base/base.controller';
 import Product, { couldBeUpdated } from './product.model';
-import logger from '../../logger/logger';
 
 class ProductController extends BaseController {
   constructor() {
@@ -11,11 +10,16 @@ class ProductController extends BaseController {
   // You can add additional methods specific to ProductController here
   async getById(req: Request, res: Response): Promise<void> {
     try {
+      // const user = await Product.findById(req.params._id).populate('user_ref');
+
       const product = await Product.findById(req.params._id).populate(
         'user_ref'
       );
       if (!product) {
-        logger.error(`ProductID Retrieving Error: User Not Found`);
+        this.logger.error(
+          `ProductID Retrieving Error: User Not Found: _id =`,
+          req.params._id
+        );
         res.status(404).send({
           message: 'Product Not Found',
         });
@@ -25,7 +29,7 @@ class ProductController extends BaseController {
         data: product,
       });
     } catch (err) {
-      logger.error(`ProductID Retrieving Error: ${err}`);
+      this.logger.error(`ProductID Retrieving Error: ${err}`);
 
       res.status(500).send({
         message: 'Server Internal Error',
