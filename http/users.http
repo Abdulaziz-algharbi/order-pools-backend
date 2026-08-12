@@ -1,22 +1,65 @@
 @baseUrl=http://localhost:8000/api/v1/users
+@userId=6a7c2b41f389f6ed96dc98e8
+@addressIds=["6a731fd174b4f84b4767e2a8", "6a7c2ad3f389f6ed96dc98e5"]
 
 ### create user
 POST {{baseUrl}}
 Content-Type: application/json
 
 {
-  "firstName": "TEST",
-  "lastName": "CHECKER",
-  "email": "test2@test.test",
-  "phoneNumber": "1234567890",
-  "companyName": "TEST COMPANY",
-  "password": "testpassword"
+  "firstName": "supplier",
+  "lastName": "two",
+  "email": "supplier@two.com",
+  "phoneNumber": "91149027",
+  "companyName": "supplier company",
+  "password": "suppliertest",
+  "addresses": {{addressIds}},
+  "role": "SUPPLIER"
 }
 
+### get all users
 
-  #  firstName: { type: String, required: true },
-  #   lastName: { type: String, required: true },
-  #   email: { type: String, required: true, unique: true },
-  #   phoneNumber: { type: String, required: true },
-  #   companyName: { type: String, required: true },
-  #   password: { type: String, required: true }, // hashed sha256
+GET {{baseUrl}}
+
+### get user by id
+
+GET {{baseUrl}}/{{userId}}
+
+### update user
+
+PATCH {{baseUrl}}/{{userId}}
+Content-Type: application/json
+
+{
+  "firstName": "Updated",
+  "lastName": "User",
+  "companyName": "Updated Company"
+}
+
+### delete user
+DELETE {{baseUrl}}/{{userId}}
+
+
+
+#   firstName: { type: String, required: true },
+#   lastName: { type: String, required: true },
+#   email: { type: String, required: true, unique: true },
+#   phoneNumber: { type: String, required: true },
+#   companyName: { type: String, required: true },
+#   password: { type: String, required: true }, // hashed sha256
+#   addresses: {
+#       type: [
+#         {
+#           type: Schema.Types.ObjectId,
+#           ref: 'Address',
+#           required: true,
+#         },
+#       ],
+#       validate: {
+#         validator: function (addresses) {
+#           return addresses.length > 0;
+#         },
+#         message: 'At least one address is required.',
+#       },
+#       default: [],
+#     }

@@ -2,7 +2,7 @@ import { Router } from 'express';
 
 import users from '../../../services/users';
 import products from '../../../services/products';
-import productOffers from '../../../services/productOffers';
+import productOffers from '../../../services/product.offers';
 import meetings from '../../../services/meetings';
 import addresses from '../../../services/addresses';
 import auth from '../../../services/auth';

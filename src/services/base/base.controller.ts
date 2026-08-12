@@ -37,11 +37,31 @@ class BaseController {
       res.status(201).send(savedDoc);
     } catch (error) {
       if (error instanceof mongoose.Error.ValidationError) {
+        this.logger.warn(`{this.model.modelName} Creation: Validation Error`);
         res.status(400).send({
           message: 'Validation Error',
           errors: error.errors,
         });
+        return;
       }
+
+      // MongoDB duplicate key error
+      if (
+        error instanceof mongoose.mongo.MongoServerError &&
+        error.code === 11000
+      ) {
+        this.logger.warn(
+          `${this.model.modelName} Duplicate Key: ${error.message}`
+        );
+
+        res.status(409).send({
+          message: error.message,
+        });
+
+        return;
+      }
+
+      // Unexpected error
       this.logger.error(`${this.model.modelName} Creation: ${error}`);
       res.status(500).send({ message: 'Internal server error' });
     }

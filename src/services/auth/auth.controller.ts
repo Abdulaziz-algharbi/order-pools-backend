@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-
+import jwt from 'jsonwebtoken';
 import BaseController from '../base/base.controller';
 import AuthModel from './auth.model';
 
@@ -10,8 +10,7 @@ class AuthController extends BaseController {
 
   async register(req: Request, res: Response) {
     try {
-      // const { firstName, lastName, email, phoneNumber, companyName, password } =
-      //   req.body;
+      // const { firstName, lastName, email, phoneNumber, companyName, password } = req.body;
       const userModel = this.registry.get(this.REGISTRY.USER_MODEL);
       const existing = await userModel.findOne({ email: req.body.email });
       if (existing) throw new Error('User already exists');
@@ -83,7 +82,43 @@ class AuthController extends BaseController {
     res.status(200).json({ user });
   }
 
-  async refresh(req: Request, res: Response) {}
+  async refresh(req: Request, res: Response) {
+    try {
+      const { refreshToken } = req.body;
+
+      if (!refreshToken) {
+        res.status(401).send({
+          message: 'Refresh token is required',
+        });
+        return;
+      }
+
+      const decoded = this.jwt.verifyRefreshToken(refreshToken) as {
+        _id: string;
+      };
+
+      if (!decoded) {
+        res.status(401).send({
+          message: 'Invalid or expired refresh token',
+        });
+        return;
+      }
+
+      const { _id, role } = decoded as jwt.JwtPayload;
+
+      const accessToken = this.jwt.createAccessToken({ _id, role });
+
+      res.status(200).send({
+        accessToken,
+      });
+    } catch (error) {
+      this.logger.error(`Token refresh failed: ${error}`);
+
+      res.status(500).send({
+        message: 'Internal server error',
+      });
+    }
+  }
 }
 
 const authController = new AuthController();

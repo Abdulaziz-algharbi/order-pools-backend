@@ -20,6 +20,7 @@ const productOfferSchema = new Schema<ProductOffer>(
     product_ref: {
       type: Types.ObjectId,
       ref: 'Product',
+      required: true,
     },
     wholeQuantity: { type: Number, required: true },
     price: { type: Number, required: true },

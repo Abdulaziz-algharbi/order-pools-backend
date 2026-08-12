@@ -1,0 +1,44 @@
+@baseUrl=http://localhost:8000/api/v1/meetings
+@meetingId=6a7c4de868b6d6b70882e4fa
+@productOffer_ref="6a7c26734c99595aa3ec738a"
+
+### create meeting
+
+POST {{baseUrl}}
+Content-Type: application/json
+
+{
+    "productOffer_ref": {{productOffer_ref}},
+    "meeting": "not the size we agreed with",
+    "scheduledAt": "2026-08-15T14:30:00Z"
+}
+
+### list meetings
+
+GET {{baseUrl}}
+
+### get meeting by id
+
+GET {{baseUrl}}/{{meetingId}}
+
+### update meeting
+
+PATCH {{baseUrl}}/{{meetingId}}
+Content-Type: application/json
+
+{
+    "meeting": "price negotiation",
+    "scheduledAt": "2026-08-20T14:30:00Z"
+}
+
+### delete meeting
+
+DELETE {{baseUrl}}/{{meetingId}}
+
+
+# productOffer_ref: {
+#     type: Types.ObjectId,
+#     ref: 'ProductOffer',
+# }
+# meeting: { type: String, required: true },
+# scheduledAt: { type: Date, required: true },

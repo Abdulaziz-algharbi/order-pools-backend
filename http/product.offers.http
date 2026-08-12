@@ -1,0 +1,47 @@
+@baseUrl=http://localhost:8000/api/v1/productOffers
+@productOfferId=6a7c25d44c99595aa3ec7389
+@productId="6a7c204078d65e3825b64c68"
+
+
+### create productOffer
+
+POST {{baseUrl}}
+Content-Type: application/json
+
+{
+    "product_ref": {{productId}},
+    "wholeQuantity": 10,
+    "price": 20
+}
+
+### list productOffer
+
+GET {{baseUrl}}
+
+### get productOffer by id
+
+GET {{baseUrl}}/{{productOfferId}}
+
+### update productOffer
+
+PATCH {{baseUrl}}/{{productOfferId}}
+Content-Type: application/json
+
+{
+    "wholeQuantity": 50,
+    "price": 7
+}
+
+### delete productOffer
+
+DELETE {{baseUrl}}/{{productOfferId}}
+
+
+#  Ref_ID product ID is required
+#     product_ref: {
+#       type: Types.ObjectId,
+#       ref: 'Product',
+#       required: true,
+#     },
+#     wholeQuantity: { type: Number, required: true },
+#     price: { type: Number, required: true },

@@ -1,0 +1,45 @@
+@baseUrl=http://localhost:8000/api/v1/products
+@productId=6a7338c06c28c3640eea57c5
+@supplierId="6a7c1f4f78d65e3825b64c67"
+
+### create product
+
+POST {{baseUrl}}
+Content-Type: application/json
+
+{
+    "user_ref": {{supplierId}},
+    "name": "Lemon",
+    "description": "Best Quality"
+}
+
+### list products
+
+GET {{baseUrl}}
+
+### get product by id
+
+GET {{baseUrl}}/{{productId}}
+
+### update product
+
+PATCH {{baseUrl}}/{{productId}}
+Content-Type: application/json
+
+{
+    "name": "EG Limon",
+    "description": "its size is 5cm"
+}
+
+### delete product
+
+DELETE {{baseUrl}}/{{productId}}
+
+# Ref_ID supplier user ID is required
+    # user_ref: {
+    #   type: Types.ObjectId,
+    #   ref: 'User',
+    #   required: true,
+    # },
+    # name: { type: String, required: true },
+    # description: { type: String, required: true },

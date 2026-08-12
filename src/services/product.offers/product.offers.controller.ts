@@ -1,5 +1,5 @@
 import BaseController from '../base/base.controller';
-import ProductOffer, { couldBeUpdated } from './productOffer.model';
+import ProductOffer, { couldBeUpdated } from './product.offer.model';
 
 class ProductOffertController extends BaseController {
   constructor() {

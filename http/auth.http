@@ -1,17 +1,20 @@
 
 @baseUrl = http://localhost:8000/api/v1/auth
+@addressIds=["6a731fd174b4f84b4767e2a8", "6a7c2ad3f389f6ed96dc98e5"]
+
 
 ### register a new user
 POST {{baseUrl}}/register
 Content-Type: application/json
 
 {
-  "firstName": "TEST",
-  "lastName": "CHECKER",
-  "email": "test2@test.test",
-  "phoneNumber": "1234567890",
-  "companyName": "TEST COMPANY",
-  "password": "testpassword"
+  "firstName": "retailer",
+  "lastName": "six",
+  "email": "six@three.test",
+  "phoneNumber": "91149027",
+  "companyName": "small retailer",
+  "password": "retailerpassword",
+  "addresses": {{addressIds}}
 }
 
 ### login with the registered user
@@ -20,15 +23,24 @@ POST {{baseUrl}}/login
 Content-Type: application/json
 
 {
-  "email": "test2@test.test",
-  "password": "testpassword"
+  "email": "six@three.test",
+  "password": "retailerpassword"
 }
 
 ###
 
 @accessToken = {{login.response.body.accessToken}}
+@refreshToken = {{login.response.body.refreshToken}}
 
 ### me
 GET {{baseUrl}}/me
 Authorization: Bearer {{accessToken}}
 
+### refresh token
+
+POST  {{baseUrl}}/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{refreshToken}}"
+}

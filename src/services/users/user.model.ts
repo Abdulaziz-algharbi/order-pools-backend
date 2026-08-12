@@ -42,14 +42,15 @@ const userSchema = new Schema<IUser>(
         {
           type: Schema.Types.ObjectId,
           ref: 'Address',
+          required: true,
         },
       ],
-      // validate: {
-      //   validator: function (addresses) {
-      //     return addresses.length > 0;
-      //   },
-      //   message: 'At least one address is required.',
-      // },
+      validate: {
+        validator: function (addresses) {
+          return addresses.length > 0;
+        },
+        message: 'At least one address is required.',
+      },
       default: [],
     },
 
@@ -77,8 +78,6 @@ export const couldBeUpdated = [
   'vatNumber',
   'profileImage',
 ];
-
-// userSchema.index({ email: 1 }, { unique: true }); // Ensure email is unique
 
 userSchema.pre('save', async function () {
   // Only hash if the password was changed or it is a new user

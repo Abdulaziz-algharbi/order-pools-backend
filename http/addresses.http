@@ -1,0 +1,40 @@
+@baseUrl=http://localhost:8000/api/v1/addresses
+@addressId=6a731fd174b4f84b4767e2a8
+
+### create address
+
+POST {{baseUrl}}
+Content-Type: application/json
+
+{
+    "location": "https://share.google/UCp92LzP4tQFfHXke",
+    "region": "Al-Batinah",
+    "city": "Masnaah"
+}
+
+### list addresses
+
+GET {{baseUrl}}
+
+### get address by id
+
+GET {{baseUrl}}/{{addressId}}
+
+### update address
+
+PATCH {{baseUrl}}/{{addressId}}
+Content-Type: application/json
+
+{
+    "location": "https://maps.app.goo.gl/Ly51Sz3Zp5JpLqyS9",
+    "region": "Al-batinah",
+    "city": "AboAbali"
+}
+
+### delete address
+
+DELETE {{baseUrl}}/{{addressId}}
+
+#   location: { type: String, required: true },
+#   region: { type: String, required: true },
+#   city: { type: String, required: true },
