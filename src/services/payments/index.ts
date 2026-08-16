@@ -5,5 +5,5 @@ import paymentRoutes from './payments.routes';
 export default {
   model: paymentModel,
   controller: paymentController,
-  router: paymentRoutes,
+  routes: paymentRoutes,
 };

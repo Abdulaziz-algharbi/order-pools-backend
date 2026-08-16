@@ -5,5 +5,5 @@ import addressesRoutes from './addresses.routes';
 export default {
   model: AddressModel,
   controller: addressesController,
-  routers: addressesRoutes,
+  routes: addressesRoutes,
 };
