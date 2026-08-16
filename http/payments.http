@@ -1,0 +1,65 @@
+@baseUrl=http://localhost:8000/api/v1/payments
+@paymentId=""
+@userID=""
+@poolParticipantId=""
+
+
+### create payment
+
+POST {{baseUrl}}
+Content-Type: application/json
+
+{
+    "user_ref": {{userID}},
+    "poolParticipant_ref": {{poolParticipantId}},
+    "transactionReference": "", // s3 url that shows a transaction paper
+    "amount": 50,
+    "stripePaymentIntentId": "" // got from stripe
+}
+
+### list payments
+
+GET {{baseUrl}}
+
+### get payment by id
+
+GET {{baseUrl}}/{{paymentId}}
+
+### update payment
+
+PATCH {{baseUrl}}/{{paymentId}}
+Content-Type: application/json
+
+{
+    "amount": 60,
+}
+
+### delete payment
+
+DELETE {{baseUrl}}/{{paymentId}}
+
+
+
+# // Ref_ID user ID, poolParticipant ID are required
+#     user_ref: {
+#       type: Types.ObjectId,
+#       ref: 'User',
+#       required: true,
+#     },
+#     poolParticipant_ref: {
+#       type: Types.ObjectId,
+#       ref: 'PoolParticipant',
+#       required: true,
+#     },
+#     transactionReference: {
+#       type: String,
+#       required: true,
+#     },
+#     amount: {
+#       type: Number,
+#       required: true,
+#     },
+#     stripePaymentIntentId: {
+#       type: String,
+#       required: true,
+#     }

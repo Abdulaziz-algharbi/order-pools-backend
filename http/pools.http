@@ -1,0 +1,50 @@
+@baseUrl=http://localhost:8000/api/v1/pools
+@poolId=6a8136f57464a01bfe7222c8
+@productOfferId="6a7c25d44c99595aa3ec7389"
+
+
+### create pool
+
+POST {{baseUrl}}
+Content-Type: application/json
+
+{
+    "productoffer_ref": {{productOfferId}},
+    "currentQuantity": 70,
+    "minimumContribution": 10,
+    "pricePerUnit": 1,
+    "endDate": "2026-08-29T14:30:00Z"
+}
+
+### list pools
+
+GET {{baseUrl}}
+
+### get pool by id
+
+GET {{baseUrl}}/{{poolId}}
+
+### update pool
+
+PATCH {{baseUrl}}/{{poolId}}
+Content-Type: application/json
+
+{
+    "minimumContribution": 12,
+    "pricePerUnit": 7
+}
+
+### delete pool
+
+DELETE {{baseUrl}}/{{poolId}}
+
+
+#     productoffer_ref: {
+#       type: Types.ObjectId,
+#       ref: 'ProductOffer',
+#       required: true,
+#     },
+#     currentQuantity: { type: Number, required: true },
+#     minimumContribution: { type: Number, required: true },
+#     pricePerUnit: { type: Number, required: true },
+#     endDate: { type: Date, required: true },

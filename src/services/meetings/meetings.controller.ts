@@ -6,7 +6,7 @@ class MeetingController extends BaseController {
     super(meetingModel, couldBeUpdated);
   }
 
-  // You can add additional methods specific to UserController here
+  // You can add additional methods specific to meetingController here
 }
 
 const meetingController = new MeetingController();

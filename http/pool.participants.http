@@ -1,0 +1,67 @@
+@baseUrl=http://localhost:8000/api/v1/poolParticipants
+@poolParticipantId=""
+@userID=""
+@poolId="6a8136f57464a01bfe7222c8"
+@paymentId=""
+@deliveryId=""
+
+
+### create poolParticipant
+
+POST {{baseUrl}}
+Content-Type: application/json
+
+{
+    "pool_ref": {{poolId}},
+    "payment_ref": {{paymentId}},
+    "delivery_ref": {{deliveryId}},
+    "quantity": 15,
+}
+
+### list poolParticipants
+
+GET {{baseUrl}}
+
+### get poolParticipant by id
+
+GET {{baseUrl}}/{{poolParticipantId}}
+
+### update poolParticipant
+
+PATCH {{baseUrl}}/{{poolParticipantId}}
+Content-Type: application/json
+
+{
+    "quantity": 12,
+}
+
+### delete pool
+
+DELETE {{baseUrl}}/{{poolParticipantId}}
+
+
+# // Ref_ID user ID, pool ID and payment ID (hold) are required
+#     user_ref: {
+#       type: Types.ObjectId,
+#       ref: 'User',
+#       require: true,
+#     },
+#     pool_ref: {
+#       type: Types.ObjectId,
+#       ref: 'Pool',
+#       required: true,
+#     },
+#     payment_ref: {
+#       type: Types.ObjectId,
+#       ref: 'Payment',
+#       required: true,
+#     },
+#     delivery_ref: {
+#       type: Types.ObjectId,
+#       ref: 'Delivery',
+#       default: 'NOT SET',
+#     },
+#     quantity: {
+#       type: Number,
+#       required: true,
+#     },

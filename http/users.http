@@ -10,6 +10,8 @@ Content-Type: application/json
   "firstName": "supplier",
   "lastName": "two",
   "email": "supplier@two.com",
+  "stripeCustomerId": "", // must be got from stripe api
+  "stripePaymentMethodId": "", // must be got from stripe api 
   "phoneNumber": "91149027",
   "companyName": "supplier company",
   "password": "suppliertest",
@@ -44,6 +46,8 @@ DELETE {{baseUrl}}/{{userId}}
 #   firstName: { type: String, required: true },
 #   lastName: { type: String, required: true },
 #   email: { type: String, required: true, unique: true },
+#   stripeCustomerId: string,
+#   stripePaymentMethodId: string,
 #   phoneNumber: { type: String, required: true },
 #   companyName: { type: String, required: true },
 #   password: { type: String, required: true }, // hashed sha256
