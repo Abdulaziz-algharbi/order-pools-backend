@@ -10,6 +10,11 @@ import pools from '../../../services/pools';
 import poolParticipants from '../../../services/pool.participants';
 import payments from '../../../services/payments';
 import supplierPayouts from '../../../services/supplier.payouts';
+import shipments from '../../../services/shipments';
+import distributionBatches from '../../../services/distribution.batches';
+import deliveries from '../../../services/deliveries';
+import complaints from '../../../services/complaints';
+import notifications from '../../../services/notifications';
 
 const router = Router();
 
@@ -23,5 +28,10 @@ router.use('/pools', pools.routes);
 router.use('/poolParticipants', poolParticipants.routes);
 router.use('/payments', payments.routes);
 router.use('/supplierPayouts', supplierPayouts.routes);
+router.use('/shipments', shipments.routes);
+router.use('/distributionBatches', distributionBatches.routes);
+router.use('/deliveries', deliveries.routes);
+router.use('/complaints', complaints.routes);
+router.use('/notifications', notifications.routes);
 
 export default router;
