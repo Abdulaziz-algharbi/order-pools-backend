@@ -1,9 +1,9 @@
 import BaseController from '../base/base.controller';
-import deliveryModel from './delivery.model';
+import deliveryModel, { couldBeUpdated } from './delivery.model';
 
 class DeliveryController extends BaseController {
   constructor() {
-    super(deliveryModel, []);
+    super(deliveryModel, couldBeUpdated);
     this.logger.info('Delivery initialized');
   }
 

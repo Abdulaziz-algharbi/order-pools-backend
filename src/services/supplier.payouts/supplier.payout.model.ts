@@ -11,6 +11,7 @@ interface SupplierPayout extends Document {
 }
 
 const supplierPayoutSechema = new Schema<SupplierPayout>(
+  // need to be reviewed to do the calculation in the backend!
   {
     pool_ref: {
       type: Types.ObjectId,

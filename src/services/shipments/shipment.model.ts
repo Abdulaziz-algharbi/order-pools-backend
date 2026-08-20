@@ -6,7 +6,7 @@ interface Shipment extends Document {
   expectedReadyDate: Date;
   actualReadyDate: Date | 'Not Set';
   pickUpDate: Date | 'Not Set';
-  pickedUpAt: Date | 'No Set';
+  pickedUpAt: Date | 'Not Set';
   status:
     | 'PREPARATION'
     | 'READY_FOR_PICKUP'
@@ -36,16 +36,34 @@ const shipmentSchema = new Schema<Shipment>(
       required: true,
     },
     actualReadyDate: {
-      type: Date,
+      type: Schema.Types.Mixed,
+      validate: {
+        validator: function (v) {
+          return typeof v === 'string' || v instanceof Date;
+        },
+        message: (props) => `${props.value} is not a valid string or date`,
+      },
       default: 'Not Set',
     },
     pickUpDate: {
-      type: Date,
+      type: Schema.Types.Mixed,
+      validate: {
+        validator: function (v) {
+          return typeof v === 'string' || v instanceof Date;
+        },
+        message: (props) => `${props.value} is not a valid string or date`,
+      },
       default: 'Not Set',
     },
     pickedUpAt: {
-      type: Date,
-      default: 'No Set',
+      type: Schema.Types.Mixed,
+      validate: {
+        validator: function (v) {
+          return typeof v === 'string' || v instanceof Date;
+        },
+        message: (props) => `${props.value} is not a valid string or date`,
+      },
+      default: 'Not Set',
     },
     status: {
       type: String,

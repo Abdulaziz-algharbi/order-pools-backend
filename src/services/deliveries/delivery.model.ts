@@ -18,10 +18,18 @@ const deliverySchema = new Schema<Delivery>({
     default: 'PENDING',
   },
   deliveredAt: {
-    type: Date,
+    type: Schema.Types.Mixed,
+    validate: {
+      validator: function (v) {
+        return typeof v === 'string' || v instanceof Date;
+      },
+      message: (props) => `${props.value} is not a valid string or date`,
+    },
     default: 'Not Set',
   },
 });
+
+export const couldBeUpdated = ['deliveryStatus', 'deliveredAt'];
 
 const deliveryModel = model<Delivery>('Delivery', deliverySchema);
 

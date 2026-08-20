@@ -13,7 +13,10 @@ class AuthController extends BaseController {
       // const { firstName, lastName, email, phoneNumber, companyName, password } = req.body;
       const userModel = this.registry.get(this.REGISTRY.USER_MODEL);
       const existing = await userModel.findOne({ email: req.body.email });
-      if (existing) throw new Error('User already exists');
+      if (existing) {
+        this.logger.error('User already exists');
+        res.status(400).send({ message: 'User Already exists' });
+      }
       const user = new userModel({
         ...req.body,
       });

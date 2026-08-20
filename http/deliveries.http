@@ -1,0 +1,50 @@
+@baseUrl=http://localhost:8000/api/v1/deliveries
+@deliveryId=6a86e30a1ae6373324cdc94f
+@batchId="6a86e28d5cd9e412c490d787"
+
+### create delivery
+
+POST {{baseUrl}}
+Content-Type: application/json
+
+{
+    "batch_ref": {{batchId}}
+}
+
+### list deliveries
+
+GET {{baseUrl}}
+
+### get delivery by id
+
+GET {{baseUrl}}/{{deliveryId}}
+
+### update delivery
+
+PATCH {{baseUrl}}/{{deliveryId}}
+Content-Type: application/json
+
+{
+    "deliveryStatus": "DELIVERED"
+}
+
+### delete delivery
+
+DELETE {{baseUrl}}/{{deliveryId}}
+
+# const deliverySchema = new Schema<Delivery>({
+#   batch_ref: {
+#     type: Types.ObjectId,
+#     ref: 'Batch',
+#     required: true,
+#   },
+#   deliveryStatus: {
+#     type: String,
+#     enum: ['PENDING', 'DELIVERING', 'DELIVERED'],
+#     default: 'PENDING',
+#   },
+#   deliveredAt: {
+#     type: Date,
+#     default: 'Not Set',
+#   },
+# });

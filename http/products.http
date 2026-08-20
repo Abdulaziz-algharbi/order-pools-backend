@@ -1,5 +1,5 @@
 @baseUrl=http://localhost:8000/api/v1/products
-@productId=6a7338c06c28c3640eea57c5
+@productId=6a86e8a837758866e94b8ab9
 @supplierId="6a7c1f4f78d65e3825b64c67"
 
 ### create product

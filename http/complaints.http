@@ -1,0 +1,61 @@
+@baseUrl=http://localhost:8000/api/v1/complaints
+@complaintId=6a86e34c1ae6373324cdc951
+@deliveryId="6a86e30a1ae6373324cdc94f"
+@retailerId="6a71c282ec9d84c27d309e8d"
+
+### create complaint
+
+POST {{baseUrl}}
+Content-Type: application/json
+
+{
+    "delivery_ref": {{deliveryId}},
+    "retailer_ref": {{retailerId}},
+    "title": "not the agreed number",
+    "description": "I bought 20 pieces, but I got 25"
+
+}
+
+### list complaintes
+
+GET {{baseUrl}}
+
+### get complaint by id
+
+GET {{baseUrl}}/{{complaintId}}
+
+### update complaint
+
+PATCH {{baseUrl}}/{{complaintId}}
+Content-Type: application/json
+
+{
+    "title": "I Received different product",
+    "description": "I ordered rice but got lemon!"
+}
+
+### delete complaint
+
+DELETE {{baseUrl}}/{{complaintId}}
+
+# const complaintSchema = new Schema<Complaint>({
+#   delivery_ref: {
+#     type: Types.ObjectId,
+#     ref: 'Delivery',
+#     required: true,
+#   },
+#   retialer_ref: {
+#     type: Types.ObjectId,
+#     ref: 'User',
+#     required: true,
+#   },
+#   title: {
+#     type: String,
+#     maxLength: 255,
+#     required: true
+#   },
+#   description: {
+#     type: String,
+#     maxLength: 2000,
+#     required: true
+# });

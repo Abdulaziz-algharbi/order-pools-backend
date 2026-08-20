@@ -1,7 +1,6 @@
 @baseUrl=http://localhost:8000/api/v1/payments
-@paymentId=""
-@userID=""
-@poolParticipantId=""
+@paymentId=6a86e66b698536e9980baa15
+@userID="6a71c282ec9d84c27d309e8d"
 
 
 ### create payment
@@ -11,10 +10,9 @@ Content-Type: application/json
 
 {
     "user_ref": {{userID}},
-    "poolParticipant_ref": {{poolParticipantId}},
-    "transactionReference": "", // s3 url that shows a transaction paper
+    "transactionReference": "s3 urls",
     "amount": 50,
-    "stripePaymentIntentId": "" // got from stripe
+    "stripePaymentIntentId": "stripe id"
 }
 
 ### list payments
@@ -31,7 +29,7 @@ PATCH {{baseUrl}}/{{paymentId}}
 Content-Type: application/json
 
 {
-    "amount": 60,
+    "amount": 60
 }
 
 ### delete payment
@@ -44,11 +42,6 @@ DELETE {{baseUrl}}/{{paymentId}}
 #     user_ref: {
 #       type: Types.ObjectId,
 #       ref: 'User',
-#       required: true,
-#     },
-#     poolParticipant_ref: {
-#       type: Types.ObjectId,
-#       ref: 'PoolParticipant',
 #       required: true,
 #     },
 #     transactionReference: {

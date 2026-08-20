@@ -1,0 +1,60 @@
+@baseUrl=http://localhost:8000/api/v1/payouts
+@payoutID=6a86d7ba95dc39bf917e84d8
+@poolId="6a8136f57464a01bfe7222c8"
+
+### create payout
+
+POST {{baseUrl}}
+Content-Type: application/json
+
+{
+    "pool_ref": {{poolId}},
+    "grossAmount": 350,
+    "platformCommission": 30,
+    "netAmount": 350
+}
+
+### list payoutes
+
+GET {{baseUrl}}
+
+### get payout by id
+
+GET {{baseUrl}}/{{payoutID}}
+
+### delete payout
+
+DELETE {{baseUrl}}/{{payoutID}}
+
+# const supplierPayoutSechema = new Schema<SupplierPayout>(
+#   {
+#     pool_ref: {
+#       type: Types.ObjectId,
+#       ref: 'Pool',
+#       required: true,
+#     },
+#     grossAmount: {
+#       type: Number,
+#       required: true,
+#     },
+#     platformCommission: {
+#       type: Number,
+#       required: true,
+#     },
+#     netAmount: {
+#       type: Number,
+#       required: true,
+#     },
+#     status: {
+#       type: String,
+#       enum: ['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED'],
+#       default: 'PENDING',
+#     },
+#     transactionReference: {
+#       type: String,
+#     },
+#   },
+#   {
+#     timestamps: true,
+#   }
+# );

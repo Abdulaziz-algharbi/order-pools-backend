@@ -2,7 +2,7 @@ import { model, Schema, Document, Types } from 'mongoose';
 
 interface Complaint extends Document {
   delivery_ref: Types.ObjectId;
-  retialer_ref: Types.ObjectId;
+  retailer_ref: Types.ObjectId;
   title: string;
   description: string;
   priority: 'LOW' | 'MEDIUM' | 'HIGH';
@@ -16,7 +16,7 @@ const complaintSchema = new Schema<Complaint>({
     ref: 'Delivery',
     required: true,
   },
-  retialer_ref: {
+  retailer_ref: {
     type: Types.ObjectId,
     ref: 'User',
     required: true,
@@ -24,10 +24,12 @@ const complaintSchema = new Schema<Complaint>({
   title: {
     type: String,
     maxLength: 255,
+    required: true,
   },
   description: {
     type: String,
     maxLength: 2000,
+    required: true,
   },
   priority: {
     type: String,

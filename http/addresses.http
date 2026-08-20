@@ -1,5 +1,5 @@
 @baseUrl=http://localhost:8000/api/v1/addresses
-@addressId=6a731fd174b4f84b4767e2a8
+@addressId=6a7c2ad3f389f6ed96dc98e5
 
 ### create address
 

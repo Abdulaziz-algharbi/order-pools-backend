@@ -29,7 +29,13 @@ const poolParticipantSchema = new Schema<PoolParticipant>(
       required: true,
     },
     delivery_ref: {
-      type: Types.ObjectId,
+      type: Schema.Types.Mixed,
+      validate: {
+        validator: function (v) {
+          return typeof v === 'string' || v instanceof Types.ObjectId;
+        },
+        message: (props) => `${props.value} is not a valid string or date`,
+      },
       ref: 'Delivery',
       default: 'NOT SET',
     },

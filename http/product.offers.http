@@ -1,5 +1,5 @@
-@baseUrl=http://localhost:8000/api/v1/productOffers
-@productOfferId=6a7c25d44c99595aa3ec7389
+@baseUrl=http://localhost:8000/api/v1/offers
+@productOfferId=6a86e87537758866e94b8ab8
 @productId="6a7c204078d65e3825b64c68"
 
 

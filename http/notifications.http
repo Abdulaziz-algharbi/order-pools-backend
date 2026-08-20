@@ -1,0 +1,73 @@
+@baseUrl=http://localhost:8000/api/v1/notifications
+@notificationId=6a86e0c05cd9e412c490d783
+@senderId="6a71c282ec9d84c27d309e8d"
+@recipientIds=["6a71c58bec7ee9463aeacc40","6a71d328a2dfb1d10baba8fb"]
+
+### create notification
+
+POST {{baseUrl}}
+Content-Type: application/json
+
+{
+    "sender_ref": {{senderId}},
+    "recipient_ref": {{recipientIds}},
+    "type": "NEW OFFER",
+    "title": "Limon in the track",
+    "message": "It is very quanlity and product detail",
+    "actionUrl": "url to see the product detail and request a meeting if it is not appropriate"
+}
+
+### list notificationes
+
+GET {{baseUrl}}
+
+### get notification by id
+
+GET {{baseUrl}}/{{notificationId}}
+
+### delete notification
+
+DELETE {{baseUrl}}/{{notificationId}}
+
+# const notificationSchema = new Schema<Notification>({
+#   sender_ref: {
+#     type: Types.ObjectId,
+#     ref: 'User',
+#     default: null,
+#     required: true,
+#   },
+#   recipient_ref: {
+#     type: [Types.ObjectId],
+#     ref: 'User',
+#     required: true,
+#   },
+#   type: {
+#     type: String,
+#     enum: ['PRODUCT_APPROVED', 'NEW OFFER', 'NEW COMPLAINT'],
+#   },
+#   title: {
+#     type: String,
+#     maxLength: 255,
+#     required: true,
+#   },
+#   message: {
+#     type: String,
+#     maxLength: 2000,
+#     required: true,
+#   },
+#   actionUrl: {
+#     type: String,
+#   },
+#   priority: {
+#     type: String,
+#     enum: ['LOW', 'NORMAL', 'HIGH'],
+#     default: 'NORMAL',
+#   },
+#   isRead: {
+#     type: Boolean,
+#     default: false,
+#   },
+#   readAt: {
+#     type: Date,
+#   },
+# });

@@ -2,7 +2,6 @@ import { model, Schema, Document, Types } from 'mongoose';
 
 interface Payment extends Document {
   user_ref: Types.ObjectId;
-  poolParticipant_ref: Types.ObjectId;
   transactionReference: string; // url to the paper (# may be stored in s3)
   amount: number;
   currency: 'OMR' | 'USD';
@@ -13,15 +12,10 @@ interface Payment extends Document {
 
 const paymentSchema = new Schema<Payment>(
   {
-    // Ref_ID user ID, poolParticipant ID are required
+    // Ref_ID user ID
     user_ref: {
       type: Types.ObjectId,
       ref: 'User',
-      required: true,
-    },
-    poolParticipant_ref: {
-      type: Types.ObjectId,
-      ref: 'PoolParticipant',
       required: true,
     },
     transactionReference: {
