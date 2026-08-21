@@ -6,12 +6,14 @@
 POST {{baseUrl}}
 Content-Type: application/json
 
+# we need to revisit and handle the payment registration (stripe) we will see
+
 {
   "firstName": "supplier",
   "lastName": "two",
   "email": "supplier@two.com",
-  "stripeCustomerId": "", // must be got from stripe api
-  "stripePaymentMethodId": "", // must be got from stripe api 
+  "stripeCustomerId": "",
+  "stripePaymentMethodId": "",
   "phoneNumber": "91149027",
   "companyName": "supplier company",
   "password": "suppliertest",

@@ -1,13 +1,18 @@
 import { Router } from 'express';
 
 import usersController from './users.controller';
+import { createUserSchema } from './user.schema';
+import { validate } from '../../middlewares/validate.middleware';
 
 const router = Router();
 
 router
   .route('/')
   .get(usersController.list.bind(usersController))
-  .post(usersController.create.bind(usersController));
+  .post(
+    validate(createUserSchema),
+    usersController.create.bind(usersController)
+  );
 
 router
   .route('/:_id')
