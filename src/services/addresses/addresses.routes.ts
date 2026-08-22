@@ -2,7 +2,7 @@ import { Router } from 'express';
 
 import addressesController from './addresses.controller';
 import { createAddressSchema } from './address.schema';
-import { validate } from '../../middlewares/validate.middleware';
+import { validate } from '../../middlewares';
 
 const router = Router();
 

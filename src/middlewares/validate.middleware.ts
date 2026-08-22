@@ -1,19 +1,25 @@
-import { Request, Response, NextFunction } from 'express';
+import { validateRequest } from 'zod-express-middleware';
+// import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 
-export const validate = (schema: z.ZodType) => {
-  return (req: Request, res: Response, next: NextFunction) => {
-    const result = schema.safeParse(req.body);
+type PayloadType = 'body' | 'query' | 'params';
 
-    if (!result.success) {
-      return res.status(400).json({
-        message: 'Validation Error',
-        errors: z.treeifyError(result.error),
-      });
-    }
+const validate = (schema: z.ZodType, payloadType: PayloadType = 'body') => {
+  return validateRequest({ [payloadType]: schema });
+  // return (req: Request, res: Response, next: NextFunction) => {
+  //   const result = schema.safeParse(req[payloadType]);
 
-    req.body = result.data;
+  //   if (!result.success) {
+  //     return res.status(400).json({
+  //       message: 'Validation Error',
+  //       errors: z.treeifyError(result.error),
+  //     });
+  //   }
 
-    next();
-  };
+  //   req.body = result.data;
+
+  //   next();
+  // };
 };
+
+export default validate;
