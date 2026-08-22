@@ -13,10 +13,7 @@ class AuthController extends BaseController {
       // const { firstName, lastName, email, phoneNumber, companyName, password } = req.body;
       const userModel = this.registry.get(this.REGISTRY.USER_MODEL);
       const existing = await userModel.findOne({ email: req.body.email });
-      if (existing) {
-        this.logger.error('User already exists');
-        res.status(400).send({ message: 'User Already exists' });
-      }
+      if (existing) throw new Error(this.ERRORS.CONFLICT);
       const user = new userModel({
         ...req.body,
       });
@@ -32,13 +29,19 @@ class AuthController extends BaseController {
       await auth.save();
       this.logger.info(`Auth created for user: ${savedUser._id}`);
 
+      this.broker.emit('user:registered', {
+        to: savedUser.email,
+        subject: 'Welcome to our Order Pool!',
+        text: `Hello ${savedUser.firstName}, welcome to our service!`,
+        // html: `<p>Hello ${savedUser.firstName}, welcome to our service!</p>`,
+      });
+
       res.status(201).send({
         message: 'User registered successfully',
         ...tokens,
       });
     } catch (error) {
-      this.logger.error(`User Registration: ${error}`);
-      res.status(500).send({ message: 'Internal server error' });
+      this.errorHandler(error, req, res);
     }
   }
 
@@ -120,6 +123,19 @@ class AuthController extends BaseController {
       res.status(500).send({
         message: 'Internal server error',
       });
+    }
+  }
+
+  verify(req: Request, res: Response) {
+    try {
+      const { token } = req.params as { token: string };
+      const decoded = this.jwt.verifyAccessToken(token) as jwt.JwtPayload;
+      this.logger.info(`Token verified for user: ${decoded.email}`);
+      res.send('VERIFY EMAIL FOR USER' + decoded.email);
+      // update isVerified in field in user model
+      // res.redirect()
+    } catch (error) {
+      this.errorHandler(error, req, res);
     }
   }
 }

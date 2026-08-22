@@ -14,5 +14,6 @@ router.post(
 router.post('/login', authController.login.bind(authController));
 router.post('/refresh', authController.refresh.bind(authController));
 router.get('/me', tokenMiddleware, authController.me.bind(authController));
+router.get('/verify/:token', authController.verify.bind(authController));
 
 export default router;

@@ -30,6 +30,7 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.7.4",
     "morgan": "^1.11.0",
+    "nodemailer": "^9.0.5",
     "winston": "^3.19.0",
     "zod": "^4.4.3",
     "zod-express-middleware": "^1.4.0"
@@ -42,6 +43,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/morgan": "^1.9.10",
     "@types/node": "^26.1.1",
+    "@types/nodemailer": "^8.0.1",
     "eslint": "^10.7.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-jest": "^29.15.4",

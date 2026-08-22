@@ -14,7 +14,8 @@ const logger = createLogger({
       return stack
         ? `[${timestamp}] ${level}: ${stack}`
         : `[${timestamp}] ${level}: ${message}`;
-    })
+    }),
+    format.json()
   ),
 
   transports: [

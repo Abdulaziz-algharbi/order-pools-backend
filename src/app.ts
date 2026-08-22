@@ -3,10 +3,14 @@ import morgan from 'morgan';
 
 import appRoutes from './app.routes';
 
-// services
+// registry
 import REGISTRY from './constants/REGISTRY';
-import usersServices from './services/users';
 import appRegistry from './app.registry';
+
+// services
+import usersService from './services/users';
+import emailsService from './services/emails';
+import logger from './logger/logger';
 
 const app = express();
 
@@ -15,12 +19,16 @@ app.use(morgan('dev'));
 // app.use(cors());
 
 // register services in the app registry
-appRegistry.register(REGISTRY.USER_MODEL, usersServices.model);
-appRegistry.register(REGISTRY.USERS_CONTROLLER, usersServices.controller);
+// models
+appRegistry.register(REGISTRY.USER_MODEL, usersService.model);
+// controllers
+appRegistry.register(REGISTRY.USERS_CONTROLLER, usersService.controller);
+appRegistry.register(REGISTRY.EMAILS_CONTROLLER, emailsService.controller);
 
 app.use(appRoutes);
 
 app.get('/ping', function (req, res) {
+  logger.info('Ping request received', { timestamp: new Date().toISOString() });
   res.send('pong');
 });
 

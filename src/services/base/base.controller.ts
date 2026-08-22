@@ -7,6 +7,8 @@ import logger from '../../logger/logger';
 import appRegistry from '../../app.registry';
 import REGISTRY from '../../constants/REGISTRY';
 import jwtUtil from '../../utils/jwt.util';
+import appBroker from '../../app.broker';
+import ERRORS from '../../constants/ERRORS';
 
 class BaseController {
   model: Model<any>;
@@ -17,16 +19,62 @@ class BaseController {
   REGISTRY: typeof REGISTRY;
   jwt: typeof jwtUtil;
   hasher: typeof bcrypt;
+  broker: typeof appBroker;
+  listeners?(): void;
+  ERRORS: typeof ERRORS;
+  errorHandler: (
+    err: any,
+    req: Request,
+    res: Response
+    // next: Function
+  ) => void;
 
-  constructor(model: Model<any>, allowedFields: Array<string>) {
+  constructor(model: Model<any>, allowedFields?: Array<string>) {
     this.model = model;
     this.config = config;
-    this.allowedFields = allowedFields;
+    this.allowedFields = allowedFields || [];
     this.logger = logger;
     this.registry = appRegistry;
     this.REGISTRY = REGISTRY;
     this.jwt = jwtUtil;
     this.hasher = bcrypt;
+    this.broker = appBroker;
+    this.ERRORS = ERRORS;
+
+    this.errorHandler = (
+      err: any,
+      req: Request,
+      res: Response
+      // next: Function
+    ) => {
+      this.logger.error(`Error: ${err.message}`);
+      switch (err.message) {
+        case ERRORS.USER_NOT_FOUND:
+          res.status(404).send({ message: ERRORS.USER_NOT_FOUND });
+          break;
+        case ERRORS.INVALID_CREDENTIALS:
+          res.status(401).send({ message: ERRORS.INVALID_CREDENTIALS });
+          break;
+        case ERRORS.UNAUTHORIZED:
+          res.status(403).send({ message: ERRORS.UNAUTHORIZED });
+          break;
+        case ERRORS.CONFLICT:
+          res.status(409).send({ message: ERRORS.CONFLICT });
+          break;
+        case ERRORS.INTERNAL_SERVER_ERROR:
+          res.status(500).send({ message: ERRORS.INTERNAL_SERVER_ERROR });
+          break;
+        case ERRORS.TOKEN_EXPIRED:
+          res.status(401).send({ message: ERRORS.TOKEN_EXPIRED });
+          break;
+        default:
+          res.status(500).send({ message: 'Internal server error' });
+      }
+    };
+
+    if (this.listeners && typeof this.listeners === 'function') {
+      this.listeners();
+    }
   }
 
   async create(req: Request, res: Response): Promise<void> {

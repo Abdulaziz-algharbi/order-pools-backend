@@ -10,6 +10,10 @@ interface IConfig {
   jwtTokenTtl: string;
   jwtRefreshTokenSecret: string;
   jwtRefreshTokenTtl: string;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpUser?: string;
+  smtpPass?: string;
 }
 
 const config = {
@@ -23,6 +27,12 @@ const config = {
   jwtTokenTtl: process.env.JWT_TOKEN_TTL || '1h',
   jwtRefreshTokenSecret: process.env.JWT_REFRESH_TOKEN_SECRET || '',
   jwtRefreshTokenTtl: process.env.JWT_REFRESH_TOKEN_TTL || '7d',
+  smtpHost: process.env.SMTP_HOST,
+  smtpPort: process.env.SMTP_PORT
+    ? parseInt(process.env.SMTP_PORT, 10)
+    : undefined,
+  smtpUser: process.env.SMTP_USER,
+  smtpPass: process.env.SMTP_PASS,
 } as IConfig;
 
 export default config;
