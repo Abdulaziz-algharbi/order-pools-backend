@@ -1,8 +1,8 @@
 import { Router } from 'express';
 
-import usersController from './users.controller';
-import { createUserSchema } from './user.schema';
 import { validate } from '../../middlewares';
+import { createUserSchema, updateUserSchema } from './user.schema';
+import usersController from './users.controller';
 
 const router = Router();
 
@@ -17,7 +17,10 @@ router
 router
   .route('/:_id')
   .get(usersController.getById.bind(usersController))
-  .patch(usersController.update.bind(usersController))
+  .patch(
+    validate(updateUserSchema),
+    usersController.update.bind(usersController)
+  )
   .delete(usersController.delete.bind(usersController));
 
 export default router;

@@ -55,6 +55,8 @@ const notificationSchema = new Schema<Notification>({
   },
 });
 
+export const couldBeUpdated = ['isRead', 'readAt'];
+
 const notificationModel = model<Notification>(
   'Notification',
   notificationSchema

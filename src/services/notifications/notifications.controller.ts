@@ -1,9 +1,9 @@
 import BaseController from '../base/base.controller';
-import notificationModel from './notification.model';
+import notificationModel, { couldBeUpdated } from './notification.model';
 
 class NotificationController extends BaseController {
   constructor() {
-    super(notificationModel, []);
+    super(notificationModel, couldBeUpdated);
     this.logger.info('Notification initialized');
   }
 
