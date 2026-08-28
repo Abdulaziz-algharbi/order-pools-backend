@@ -14,7 +14,7 @@ Content-Type: application/json
     "type": "NEW OFFER",
     "title": "Limon in the track",
     "message": "It is very quanlity and product detail",
-    "actionUrl": "url to see the product detail and request a meeting if it is not appropriate"
+    "actionUrl": "url to see the product detail"
 }
 
 ### list notificationes

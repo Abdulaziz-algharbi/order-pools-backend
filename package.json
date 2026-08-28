@@ -32,8 +32,7 @@
     "morgan": "^1.11.0",
     "nodemailer": "^9.0.5",
     "winston": "^3.19.0",
-    "zod": "^4.4.3",
-    "zod-express-middleware": "^1.4.0"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

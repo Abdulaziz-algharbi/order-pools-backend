@@ -10,15 +10,14 @@ Content-Type: application/json
 
 {
   "firstName": "supplier",
-  "lastName": "two",
-  "email": "supplier@two.com",
-  "stripeCustomerId": "",
-  "stripePaymentMethodId": "",
+  "lastName": "test",
+  "email": "supplierTest2@two.com",
+  // "stripeCustomerId": "",
+  // "stripePaymentMethodId": "",
   "phoneNumber": "91149027",
   "companyName": "supplier company",
   "password": "suppliertest",
-  "addresses": {{addressIds}},
-  "role": "SUPPLIER"
+  "addresses": {{addressIds}}
 }
 
 ### get all users

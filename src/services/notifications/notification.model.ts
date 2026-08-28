@@ -1,4 +1,4 @@
-import { model, Schema, Document, Types } from 'mongoose';
+import { Document, model, Schema, Types } from 'mongoose';
 
 interface Notification extends Document {
   sender_ref: Types.ObjectId | null; // it may be from admin;
@@ -6,7 +6,7 @@ interface Notification extends Document {
   type: 'PRODUCT_APPROVED' | 'NEW OFFER' | 'NEW COMPLAINT'; // we can add more types as system requires
   title: string;
   message: string;
-  actionUrl: string; // meeting url or an url refers to fix issue # Not Certain
+  actionUrl: string;
   priority: 'LOW' | 'NORMAL' | 'HIGH';
   isRead: boolean;
   readAt: Date;

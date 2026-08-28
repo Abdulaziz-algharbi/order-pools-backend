@@ -16,7 +16,7 @@ const poolParticipantSchema = new Schema<PoolParticipant>(
     user_ref: {
       type: Types.ObjectId,
       ref: 'User',
-      require: true,
+      required: true,
     },
     pool_ref: {
       type: Types.ObjectId,

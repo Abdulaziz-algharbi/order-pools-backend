@@ -48,6 +48,23 @@ class BaseController {
       // next: Function
     ) => {
       this.logger.error(`Error: ${err.message}`);
+
+      if (err instanceof mongoose.Error.ValidationError) {
+        res.status(400).send({
+          message: 'Validation Error',
+          errors: err.errors,
+        });
+        return;
+      }
+
+      if (
+        err instanceof mongoose.mongo.MongoServerError &&
+        err.code === 11000
+      ) {
+        res.status(409).send({ message: err.message });
+        return;
+      }
+
       switch (err.message) {
         case ERRORS.USER_NOT_FOUND:
           res.status(404).send({ message: ERRORS.USER_NOT_FOUND });

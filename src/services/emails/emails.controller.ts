@@ -53,14 +53,21 @@ class EmailsController extends BaseController {
         this.logger.info('user:registered event received:', data);
         const { to, subject, text } = data;
 
-        const verifyLink = await this.createVerificationLink(data.to);
+        try {
+          const verifyLink = await this.createVerificationLink(data.to);
 
-        const html = `
-          <p>please click the link below to verify your email address:</p>
-          <a href=${verifyLink}>Verify Email</a>
-        `;
+          const html = `
+            <p>please click the link below to verify your email address:</p>
+            <a href=${verifyLink}>Verify Email</a>
+          `;
 
-        await this.send(to, subject, text, html);
+          await this.send(to, subject, text, html);
+        } catch (error) {
+          // EventEmitter does not await listeners, so an uncaught rejection
+          // here would otherwise crash the whole process (registration
+          // itself already succeeded and must not be affected by this).
+          this.logger.error(`user:registered email delivery failed: ${error}`);
+        }
       }
     );
   }

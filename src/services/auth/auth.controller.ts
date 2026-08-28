@@ -51,10 +51,10 @@ class AuthController extends BaseController {
       const { email, password } = req.body;
       const userModel = this.registry.get(this.REGISTRY.USER_MODEL);
       const user = await userModel.findOne({ email });
-      if (!user) throw new Error('User not found');
+      if (!user) throw new Error(this.ERRORS.USER_NOT_FOUND);
 
       if (!this.hasher.compareSync(password, user.password))
-        throw new Error('Invalid password');
+        throw new Error(this.ERRORS.INVALID_CREDENTIALS);
       const tokens = this.jwt.createTokens({ _id: user._id });
       await this.model.findOneAndUpdate(
         { userId: user._id },
@@ -70,8 +70,7 @@ class AuthController extends BaseController {
         ...tokens,
       });
     } catch (error) {
-      this.logger.error(`User Login: ${error}`);
-      res.status(500).send({ message: 'Internal server error' });
+      this.errorHandler(error, req, res);
     }
   }
 

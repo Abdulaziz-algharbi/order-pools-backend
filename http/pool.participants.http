@@ -12,6 +12,7 @@ POST {{baseUrl}}
 Content-Type: application/json
 
 {
+    "user_ref": {{userID}},
     "pool_ref": {{poolId}},
     "payment_ref": {{paymentId}},
     "delivery_ref": {{deliveryId}},
