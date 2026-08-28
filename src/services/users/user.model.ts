@@ -3,6 +3,8 @@ import bcrypt from 'bcrypt';
 
 // used as a reference:
 
+export type UserRole = 'ADMIN' | 'SUPPLIER' | 'RETAILER';
+
 export interface IUser extends Document {
   firstName: string;
   lastName: string;
@@ -12,7 +14,7 @@ export interface IUser extends Document {
   phoneNumber: string;
   password: string; // hashed sha256
   companyName: string;
-  role?: 'ADMIN' | 'SUPPLIER' | 'RETAILER';
+  role?: UserRole;
   commercialRegistration?: string | null;
   vatNumber?: string | null;
   addresses: Types.ObjectId[]; // id addresses and some most retrieval fields

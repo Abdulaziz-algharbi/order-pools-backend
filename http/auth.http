@@ -8,9 +8,9 @@ POST {{baseUrl}}/register
 Content-Type: application/json
 
 {
-  "firstName": "retailer11",
-  "lastName": "smith1111",
-  "email": "philchoi@icloud.com",
+  "firstName": "retailer15",
+  "lastName": "smith1113",
+  "email": "202311280@gcet.edu.om",
   "phoneNumber": "1911419027",
   "companyName": "small retailer",
   "password": "retailerpassword",

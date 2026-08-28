@@ -4,7 +4,7 @@ import {
   createProductOfferSchema,
   updateProductOfferSchema,
 } from './product.offer.schema';
-import { validate } from '../../middlewares';
+import { validate, tokenMiddleware, requireRole } from '../../middlewares';
 
 const router = Router();
 
@@ -23,6 +23,10 @@ router
     validate(updateProductOfferSchema),
     productOffersController.update.bind(productOffersController)
   )
-  .delete(productOffersController.delete.bind(productOffersController));
+  .delete(
+    tokenMiddleware,
+    requireRole('ADMIN'),
+    productOffersController.delete.bind(productOffersController)
+  );
 
 export default router;

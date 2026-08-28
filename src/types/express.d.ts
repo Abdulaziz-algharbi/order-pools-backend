@@ -1,4 +1,4 @@
-// import type { IUser } from "../services/users/user.model";
+import type { UserRole } from '../services/users/user.model';
 
 export {};
 
@@ -16,6 +16,7 @@ declare global {
       meta: {
         user?: {
           userId: string;
+          role: UserRole;
         };
       };
     }

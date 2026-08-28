@@ -18,7 +18,10 @@ class AuthController extends BaseController {
         ...req.body,
       });
       const savedUser = await user.save();
-      const tokens = this.jwt.createTokens({ _id: savedUser._id });
+      const tokens = this.jwt.createTokens({
+        _id: savedUser._id,
+        role: savedUser.role,
+      });
       this.logger.info(`User registered: ${savedUser._id}`);
 
       const auth = new this.model({
@@ -55,7 +58,7 @@ class AuthController extends BaseController {
 
       if (!this.hasher.compareSync(password, user.password))
         throw new Error(this.ERRORS.INVALID_CREDENTIALS);
-      const tokens = this.jwt.createTokens({ _id: user._id });
+      const tokens = this.jwt.createTokens({ _id: user._id, role: user.role });
       await this.model.findOneAndUpdate(
         { userId: user._id },
         {

@@ -4,13 +4,13 @@ import {
   createComplaintSchema,
   updateComplaintSchema,
 } from './complaint.schema';
-import { validate } from '../../middlewares';
+import { validate, tokenMiddleware, requireRole } from '../../middlewares';
 
 const router = Router();
 
 router
   .route('/')
-  .get(complaintController.list.bind(complaintController))
+  .get(tokenMiddleware, complaintController.list.bind(complaintController))
   .post(
     validate(createComplaintSchema),
     complaintController.create.bind(complaintController)
@@ -23,6 +23,10 @@ router
     validate(updateComplaintSchema),
     complaintController.update.bind(complaintController)
   )
-  .delete(complaintController.delete.bind(complaintController));
+  .delete(
+    tokenMiddleware,
+    requireRole('ADMIN'),
+    complaintController.delete.bind(complaintController)
+  );
 
 export default router;

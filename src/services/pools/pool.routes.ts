@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import poolController from './pool.controller';
 import { createPoolSchema, updatePoolSchema } from './pool.schema';
-import { validate } from '../../middlewares';
+import { validate, tokenMiddleware, requireRole } from '../../middlewares';
 
 const router = Router();
 
@@ -14,6 +14,10 @@ router
   .route('/:_id')
   .get(poolController.getById.bind(poolController))
   .patch(validate(updatePoolSchema), poolController.update.bind(poolController))
-  .delete(poolController.delete.bind(poolController));
+  .delete(
+    tokenMiddleware,
+    requireRole('ADMIN'),
+    poolController.delete.bind(poolController)
+  );
 
 export default router;

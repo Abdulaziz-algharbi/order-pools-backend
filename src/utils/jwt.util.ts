@@ -1,11 +1,12 @@
 import jwt, { SignOptions } from 'jsonwebtoken';
 import config from '../config/config';
 import logger from '../logger/logger';
+import type { UserRole } from '../services/users/user.model';
 
 declare module 'jsonwebtoken' {
   export interface JwtPayload {
     _id: string;
-    role: string;
+    role: UserRole;
   }
 }
 
