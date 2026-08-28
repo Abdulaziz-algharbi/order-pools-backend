@@ -6,6 +6,7 @@ interface IConfig {
   port: number;
   appMode: 'DEV' | 'PROD' | 'TEST' | 'STAGING';
   mongoUri: string;
+  frontendUrl: string;
   jwtTokenSecret: string;
   jwtTokenTtl: string;
   jwtRefreshTokenSecret: string;
@@ -23,6 +24,7 @@ const config = {
   mongoUri:
     process.env[`${process.env.APP_MODE}_MONGO_URI`] ||
     'mongodb://localhost:27017/order-pool',
+  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
   jwtTokenSecret: process.env.JWT_TOKEN_SECRET || '',
   jwtTokenTtl: process.env.JWT_TOKEN_TTL || '1h',
   jwtRefreshTokenSecret: process.env.JWT_REFRESH_TOKEN_SECRET || '',

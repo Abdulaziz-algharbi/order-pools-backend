@@ -1,7 +1,9 @@
 import express from 'express';
 import morgan from 'morgan';
+import cors from 'cors';
 
 import appRoutes from './app.routes';
+import config from './config/config';
 
 // registry
 import REGISTRY from './constants/REGISTRY';
@@ -16,7 +18,7 @@ const app = express();
 
 app.use(express.json());
 app.use(morgan('dev'));
-// app.use(cors());
+app.use(cors({ origin: config.frontendUrl }));
 
 // register services in the app registry
 // models
