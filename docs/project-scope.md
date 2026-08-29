@@ -37,9 +37,8 @@ Pool --once fulfilled--> Shipment (pool_ref; PREPARATION -> READY_FOR_PICKUP -> 
                             |
                             v
                         Delivery (batch_ref; PENDING -> DELIVERING -> DELIVERED)
-                            |
-                            v
-                       Complaint (delivery_ref, retailer_ref; OPEN -> UNDER REVIEW -> RESOLVED)
+
+Pool --filed against by creator--> Complaint (pool_ref, creator_ref -> User; OPEN -> UNDER REVIEW -> RESOLVED)
 
 Pool --funds supplier via--> SupplierPayout (pool_ref, grossAmount, platformCommission, netAmount)
 ```
@@ -58,7 +57,7 @@ Each `PoolParticipant` also carries a `delivery_ref` (defaults to the string lit
 - **Shipment** — `pool_ref`, `preparedQuantity`, `expectedReadyDate`/`actualReadyDate`, `pickUpDate`/`pickedUpAt`, `status`.
 - **DistributionBatch** (`Batch` in Mongoose) — `shipment_ref`, `deliveryDate`, `region`, `assignedDriver {name, phone}`.
 - **Delivery** — `batch_ref`, `deliveryStatus`, `deliveredAt`.
-- **Complaint** — `delivery_ref`, `retailer_ref` -> User, `title/description`, `priority`, `status`, `resolution`.
+- **Complaint** — `pool_ref` -> Pool, `creator_ref` -> User (the retailer or supplier who filed it), `title/description`, `priority`, `status`, `resolution`. Not tied directly to a `Delivery` — an admin walks `Pool` -> `ProductOffer`/`PoolParticipant`/`Shipment`/`Delivery` from `pool_ref` to get the details needed to act.
 - **SupplierPayout** — `pool_ref`, `grossAmount/platformCommission/netAmount`, `status`, `transactionReference`, `paidAt`.
 - **Notification** — `sender_ref` (nullable, may be admin/system), `recipient_ref[]` -> User, `type`, `title/message/actionUrl`, `priority`, `isRead/readAt`.
 - **Auth** — `userId` -> User, `refreshToken`. One record per user, upserted on login.

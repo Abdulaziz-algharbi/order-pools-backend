@@ -3,8 +3,10 @@ import { objectId } from '../../utils/zod.util';
 
 export const createComplaintSchema = z
   .object({
-    delivery_ref: objectId('Invalid delivery ID'),
-    retailer_ref: objectId('Invalid retailer ID'),
+    pool_ref: objectId('Invalid pool ID'),
+    // No creator_ref here: a complaint is always filed by the authenticated
+    // caller (RETAILER/SUPPLIER, enforced by requireRole on the route).
+    // ComplaintController.create sets it from the session, never the client.
     title: z.string().trim().min(1).max(255),
     description: z.string().trim().min(1).max(2000),
     priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).optional(),

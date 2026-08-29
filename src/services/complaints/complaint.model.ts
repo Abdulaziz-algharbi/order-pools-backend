@@ -1,8 +1,12 @@
 import { model, Schema, Document, Types } from 'mongoose';
 
 interface Complaint extends Document {
-  delivery_ref: Types.ObjectId;
-  retailer_ref: Types.ObjectId;
+  // The retailer or supplier who filed the complaint.
+  creator_ref: Types.ObjectId;
+  // Admin walks Pool -> ProductOffer/PoolParticipant/Delivery from here to
+  // get the details needed to act, instead of the complaint carrying a
+  // direct delivery_ref.
+  pool_ref: Types.ObjectId;
   title: string;
   description: string;
   priority: 'LOW' | 'MEDIUM' | 'HIGH';
@@ -11,14 +15,14 @@ interface Complaint extends Document {
 }
 
 const complaintSchema = new Schema<Complaint>({
-  delivery_ref: {
-    type: Types.ObjectId,
-    ref: 'Delivery',
-    required: true,
-  },
-  retailer_ref: {
+  creator_ref: {
     type: Types.ObjectId,
     ref: 'User',
+    required: true,
+  },
+  pool_ref: {
+    type: Types.ObjectId,
+    ref: 'Pool',
     required: true,
   },
   title: {

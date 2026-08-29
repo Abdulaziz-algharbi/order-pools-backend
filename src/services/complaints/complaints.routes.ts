@@ -12,13 +12,15 @@ router
   .route('/')
   .get(tokenMiddleware, complaintController.list.bind(complaintController))
   .post(
+    tokenMiddleware,
+    requireRole('RETAILER', 'SUPPLIER'),
     validate(createComplaintSchema),
     complaintController.create.bind(complaintController)
   );
 
 router
   .route('/:_id')
-  .get(complaintController.getById.bind(complaintController))
+  .get(tokenMiddleware, complaintController.getById.bind(complaintController))
   .patch(
     validate(updateComplaintSchema),
     complaintController.update.bind(complaintController)

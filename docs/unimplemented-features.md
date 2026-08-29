@@ -10,15 +10,16 @@ Before writing this, the following were inspected directly (not assumed from doc
 
 ## 1. Admin Account / Authorization
 
-**Missing — this blocks everything else in this document.**
+**Foundation done (commit `0af128a`, "implement the Auth/role foundation with unit testing"); repo-wide rollout still outstanding.**
 
-- `AuthController.register`/`login` sign JWTs with `{ _id }` only (`src/services/auth/auth.controller.ts`) — **no `role` is ever put in the token.** `refresh()` destructures `role` off the decoded payload, but since it was never signed in, it is always `undefined` there too.
-- `tokenMiddleware` (`src/middlewares/token.middleware.ts`) only verifies the token and sets `req.meta.user.userId` — it never reads or attaches `role`.
-- There is no role-checking middleware anywhere in the codebase (`grep`-confirmed: no `requireRole`/`isAdmin`/`authorize`/`checkRole` exists).
-- `tokenMiddleware` itself is applied to exactly one route today: `GET /auth/me`. Every other route — including every route this spec needs to protect — currently has **no authentication at all**.
-- `createUserSchema`/`registerSchema` correctly omit `role` from client input (so nobody can self-register as ADMIN) — that part is already safe. But there is also no seed script, fixture, or any other mechanism anywhere in the repo to create the two predefined admin accounts. Today the only way to get an `ADMIN` user into the database is a manual Mongo write.
+- Done: `AuthController.register`/`login` now sign `{ _id, role }` into the JWT (`src/services/auth/auth.controller.ts`), typed via `jwt.util.ts`'s `JwtPayload.role: UserRole`.
+- Done: `tokenMiddleware` (`src/middlewares/token.middleware.ts`) decodes and attaches `role` onto `req.meta.user`, not just `userId`. Covered by `tests/middlewares/token.middleware.test.ts` and `tests/utils/jwt.util.test.ts`.
+- Done: `requireRole(...roles)` middleware now exists (`src/middlewares/require-role.middleware.ts`) — 401 if no `req.meta.user`, 403 if role not in the allowed set. Covered by `tests/middlewares/require-role.middleware.test.ts`.
+- Done: `scripts/seed-admins.ts` (`npm run seed:admins`) seeds the two predefined admin accounts from `SEED_ADMIN_{1,2}_EMAIL`/`_PASSWORD` env vars, idempotent, no public endpoint involved.
+- **Only partially rolled out:** `tokenMiddleware`/`requireRole('ADMIN')` were applied to `DELETE` on exactly three entities — `complaints`, `pools`, `product.offers` — plus `tokenMiddleware` on `GET /complaints` (with a role-aware `list()` override: admins see all complaints, everyone else only their own, tested in `tests/services/complaints.controller.test.ts`). Every other route in the app, including `DELETE` on `addresses`, `deliveries`, `pool.participants`, `distribution.batches`, `payments`, `notifications`, `shipments`, `supplier.payouts`, `products`, and `users`, is still completely unauthenticated (confirmed by grep of every `*.routes.ts` on 2026-08-29).
+- `createUserSchema`/`registerSchema` still correctly omit `role` from client input.
 
-**Needed:** put `role` in the JWT at sign time; have `tokenMiddleware` attach it to `req.meta.user`; add a `requireRole(...roles)` middleware; apply `tokenMiddleware` (+ role check where relevant) to every route this spec covers; add a seed script/mechanism for the two admin accounts (no public endpoint).
+**Still needed:** apply `tokenMiddleware` (+ `requireRole` where relevant) to the remaining routes this spec covers — every section below (§2–§10) still assumes no auth exists on its routes except where explicitly noted otherwise.
 
 ---
 
@@ -57,11 +58,12 @@ Before writing this, the following were inspected directly (not assumed from doc
 
 ## 5. Complaints
 
-- Already implemented: `Complaint` model (`delivery_ref`, `retailer_ref`, `title`, `description`, `priority: LOW|MEDIUM|HIGH`, `status: OPEN|'UNDER REVIEW'|RESOLVED`, `resolution`), generic CRUD + Zod schemas.
-- Note: `delivery_ref` is required — a complaint is tied to a `Delivery`, not a `Pool`. Any admin complaint view needs to walk that ref, not assume a direct pool link.
+- Already implemented: `Complaint` model — restructured (this session) to `pool_ref` -> Pool and `creator_ref` -> User (the retailer or supplier who filed it) in place of the original `delivery_ref`/`retailer_ref`, plus `title`, `description`, `priority: LOW|MEDIUM|HIGH`, `status: OPEN|'UNDER REVIEW'|RESOLVED`, `resolution`. Generic CRUD + Zod schemas.
+- Note: a complaint is now tied to a `Pool`, not a `Delivery` — an admin walks `Pool` -> `ProductOffer`/`PoolParticipant`/`Shipment`/`Delivery` from `pool_ref` to get the details needed to act, rather than the complaint carrying a direct delivery link.
 - **Missing entirely:** a conversation/message model. There is no `ComplaintMessage` (or similar) anywhere in the codebase — `grep` for "message" under `src/services` returns nothing. `Complaint.resolution` is a single free-text field, not a thread. "Exchange messages with the relevant party" has zero backing today.
 - Missing: a field/mechanism to record whether the root cause was the supplier or OrderPool/business operations — no such field exists on `Complaint`.
 - Missing: `status` is **not** in `Complaint.couldBeUpdated` (`['title', 'description', 'priority', 'resolution']`) — so even the existing 3-value status can't be moved via the API today.
+- Done (commit `0af128a`, refined this session): `POST /complaints` now requires `tokenMiddleware` + `requireRole('RETAILER', 'SUPPLIER')` — only the affected party can file a complaint; ADMIN gets 403 and cannot file on someone's behalf. `ComplaintController.create()` always forces `creator_ref` to the caller's own `userId` (any client-supplied value is ignored; the Zod schema doesn't even accept the field). `GET /complaints`(`/:id`) require `tokenMiddleware` and are role-aware — admins see/fetch every complaint, everyone else only complaints where `creator_ref` is their own `userId` (403 on `getById` otherwise). `DELETE /complaints/:id` requires `requireRole('ADMIN')`. `PATCH /complaints/:id` is still unauthenticated — not yet addressed.
 - Missing: automatic `Notification` creation tied to complaint state changes (new complaint → notify admin; supplier implicated → notify supplier; resolved → notify retailer).
 - Not missing: the 3-value status (`OPEN|UNDER REVIEW|RESOLVED`) reasonably covers the spec's "resolved/closed" end state already — no extra status value looks necessary.
 
@@ -71,7 +73,7 @@ Before writing this, the following were inspected directly (not assumed from doc
 
 - Already implemented: suppliers are `User` documents with `role: 'SUPPLIER'` — the single shared User model the spec asks for, no separate collection. `GET /users/:id` already populates `addresses`.
 - Missing: filtering `GET /users` by `role` — there is no way to list "just suppliers" today (cross-cutting `list()` gap, §11).
-- Missing: any aggregated "supplier profile" (their products, offers, complaints) — achievable by filtering the existing per-entity endpoints by `user_ref`/`retailer_ref` once query filtering exists (§11); no new model needed, just the filtering capability plus, likely, a couple of convenience routes.
+- Missing: any aggregated "supplier profile" (their products, offers, complaints) — achievable by filtering the existing per-entity endpoints by `user_ref`/`creator_ref` once query filtering exists (§11); no new model needed, just the filtering capability plus, likely, a couple of convenience routes.
 
 ---
 
@@ -99,7 +101,8 @@ Before writing this, the following were inspected directly (not assumed from doc
 ## 10. Historical Data
 
 - The status-based soft-close pattern (`ProductOffer.status`, `Pool.status`, `Complaint.status`) already exists and is the right mechanism — no new soft-delete concept is needed, matching the spec's instruction.
-- **Active violation today:** every entity's generic `BaseController.delete()` does a real `this.model.deleteOne(...)` — a hard delete — and every `DELETE /:_id` route is wired up with zero authentication. Right now, literally anyone can `DELETE /api/v1/offers/:id` or `DELETE /api/v1/complaints/:id` and permanently destroy exactly the historical record this spec requires to survive. This needs to be closed off (restrict/remove the `DELETE` route for these entities) as part of this work, not treated as a hypothetical risk.
+- **Partially fixed (commit `0af128a`):** `DELETE` on `complaints`, `pools`, and `product.offers` now requires `tokenMiddleware` + `requireRole('ADMIN')`.
+- **Active violation on every other entity:** every entity's generic `BaseController.delete()` still does a real `this.model.deleteOne(...)` — a hard delete — and `DELETE /:_id` on `addresses`, `deliveries`, `pool.participants`, `distribution.batches`, `payments`, `notifications`, `shipments`, `supplier.payouts`, `products`, and `users` is still wired up with zero authentication (confirmed by grep on 2026-08-29). Anyone can still `DELETE /api/v1/users/:id` and permanently destroy a historical record. This needs the same `tokenMiddleware` + `requireRole('ADMIN')` treatment applied to the rest.
 
 ---
 
@@ -108,7 +111,7 @@ Before writing this, the following were inspected directly (not assumed from doc
 These aren't per-entity — they're shared infrastructure this whole spec depends on, confirmed by reading the actual implementations:
 
 - **No query filtering anywhere.** `BaseController.list()` calls `this.model.find()` with no arguments — `req.query` is never read. Every "view active vs. pending vs. historical X" requirement in this spec (offers, pools, complaints, supplier requests, suppliers-by-role) needs this before it can work.
-- **No authentication on almost any route.** Only `GET /auth/me` uses `tokenMiddleware`. Every admin operation this spec describes needs auth + the not-yet-existing role check added first (§1).
+- **No authentication on almost any route.** `tokenMiddleware`/`requireRole` now exist (§1) and are wired onto `GET /auth/me`, `DELETE` on complaints/pools/product.offers, and `GET /complaints`. Every other route this spec describes — the vast majority of the API — still has none.
 - **No transactions anywhere in the codebase.** Multi-document admin actions this spec asks for (approve offer → create Pool; approve supplier request → create User) touch more than one collection and should use a Mongoose session per the project's own standing instruction on data integrity — none exist yet to build on or copy from.
 
 ---
@@ -121,20 +124,21 @@ Already implemented:
 - ProductOffer model + status enum (PENDING/NEGOTIATION/APPROVED/REJECTED) — vocabulary already matches the spec
 - Pool model + status enum (OPEN/TARGET_REACHED/DISTRIBUTING/COMPLETED/CANCELLED)
 - Shipment, DistributionBatch (with assignedDriver), Delivery models — full fulfillment chain exists
-- Complaint model with delivery_ref/retailer_ref/priority/status/resolution
+- Complaint model with pool_ref/creator_ref/priority/status/resolution
 - Notification model with recipient_ref array, actionUrl, priority, isRead/readAt (couldBeUpdated fixed this session)
 - Generic CRUD + Zod validation for every entity above
 - Email delivery infra (nodemailer + AppBroker event pattern) usable for supplier-request approval/rejection emails
+- Role-aware JWT (role signed at login/register) + `tokenMiddleware` attaching role + `requireRole(...roles)` middleware + admin seed script (`npm run seed:admins`), all with unit tests (commit `0af128a`)
 
 Partially implemented:
 - ProductOffer/Complaint status fields exist but are excluded from couldBeUpdated — can't be transitioned via the API at all today
 - Pool.startDate is in the TS interface and couldBeUpdated but not actually in the Mongoose schema (dead field)
 - Notification.type enum exists but doesn't cover this workflow's needed alert types
-- Historical-record durability exists via status fields, but is undermined by unauthenticated hard-delete routes on every entity
+- Historical-record durability exists via status fields; `DELETE` is now auth-protected on complaints/pools/product.offers only — every other entity's `DELETE` route is still unauthenticated
+- Auth/role foundation exists (JWT, tokenMiddleware, requireRole) but is only wired onto complaints/pools/product.offers `DELETE` + `GET /complaints` — every other route in the app still has zero authentication
 
 Missing:
-- Role-aware JWT + role-checking authorization middleware (blocks every admin-only endpoint below)
-- Admin account seeding mechanism (no public admin creation, by design — but also no way to create the two seed accounts today)
+- Repo-wide rollout of `tokenMiddleware`/`requireRole` onto the remaining routes this spec covers (the foundation itself is no longer missing, see above)
 - Approve-offer workflow (validate params -> create Pool -> set ProductOffer APPROVED, atomically)
 - Request-negotiation workflow (set NEGOTIATION status -> notify supplier with actionUrl)
 - Reject-offer workflow (reason required -> set REJECTED -> notify supplier)
@@ -155,14 +159,14 @@ Needs controller/service:
 - Pool: assignDelivery action; participants-by-pool listing
 - Complaint: add message; classify fault; status transition
 - SupplierRequest: full controller (create/list/approve/reject)
-- Cross-cutting: generic query-filter support in BaseController.list (or a documented override pattern), role-checking middleware
+- Cross-cutting: generic query-filter support in BaseController.list (or a documented override pattern) — role-checking middleware itself now exists (`requireRole`, §1), just not applied broadly yet
 
 Needs route:
 - POST /offers/:id/approve, /offers/:id/negotiate, /offers/:id/reject
 - POST /pools/:id/assign-delivery, GET /pools/:id/participants
 - POST /complaints/:id/messages, PATCH .../classify
 - Full /supplier-requests CRUD + /supplier-requests/:id/approve|reject
-- Auth + role middleware applied across all of the above and to existing sensitive routes (DELETE especially)
+- `tokenMiddleware` + `requireRole` (both already built, §1) applied across all of the above and to the remaining unauthenticated sensitive routes (DELETE on addresses, deliveries, pool.participants, distribution.batches, payments, notifications, shipments, supplier.payouts, products, users)
 
 Needs validation:
 - Zod schemas for every new route above (approve/reject/negotiate payloads, assign-delivery payload, SupplierRequest create, message create)

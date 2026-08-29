@@ -1,16 +1,16 @@
 @baseUrl=http://localhost:8000/api/v1/complaints
 @complaintId=6a86e34c1ae6373324cdc951
-@deliveryId="6a86e30a1ae6373324cdc94f"
-@retailerId="6a71c282ec9d84c27d309e8d"
+@poolId="6a86e30a1ae6373324cdc94f"
+@accessToken=""
 
-### create complaint
+### create complaint (RETAILER or SUPPLIER only — creator_ref is derived from the token, not sent; ADMIN gets 403)
 
 POST {{baseUrl}}
 Content-Type: application/json
+Authorization: Bearer {{accessToken}}
 
 {
-    "delivery_ref": {{deliveryId}},
-    "retailer_ref": {{retailerId}},
+    "pool_ref": {{poolId}},
     "title": "not the agreed number",
     "description": "I bought 20 pieces, but I got 25"
 
@@ -19,10 +19,12 @@ Content-Type: application/json
 ### list complaintes
 
 GET {{baseUrl}}
+Authorization: Bearer {{accessToken}}
 
 ### get complaint by id
 
 GET {{baseUrl}}/{{complaintId}}
+Authorization: Bearer {{accessToken}}
 
 ### update complaint
 
@@ -34,19 +36,20 @@ Content-Type: application/json
     "description": "I ordered rice but got lemon!"
 }
 
-### delete complaint
+### delete complaint (ADMIN only)
 
 DELETE {{baseUrl}}/{{complaintId}}
+Authorization: Bearer {{accessToken}}
 
 # const complaintSchema = new Schema<Complaint>({
-#   delivery_ref: {
-#     type: Types.ObjectId,
-#     ref: 'Delivery',
-#     required: true,
-#   },
-#   retialer_ref: {
+#   creator_ref: {
 #     type: Types.ObjectId,
 #     ref: 'User',
+#     required: true,
+#   },
+#   pool_ref: {
+#     type: Types.ObjectId,
+#     ref: 'Pool',
 #     required: true,
 #   },
 #   title: {
