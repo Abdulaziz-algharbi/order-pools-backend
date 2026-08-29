@@ -6,7 +6,6 @@ export const createPoolParticipantSchema = z
     user_ref: objectId('Invalid user ID'),
     pool_ref: objectId('Invalid pool ID'),
     payment_ref: objectId('Invalid payment ID'),
-    delivery_ref: objectId('Invalid delivery ID').optional(),
     quantity: z.number().positive(),
   })
   .strict();

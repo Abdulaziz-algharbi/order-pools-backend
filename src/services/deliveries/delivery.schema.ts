@@ -7,7 +7,7 @@ const deliveredAt = z.union([z.iso.datetime({ offset: true }), z.string()]);
 
 export const createDeliverySchema = z
   .object({
-    batch_ref: objectId('Invalid batch ID'),
+    pool_ref: objectId('Invalid pool ID'),
     deliveryStatus: z.enum(['PENDING', 'DELIVERING', 'DELIVERED']).optional(),
   })
   .strict();

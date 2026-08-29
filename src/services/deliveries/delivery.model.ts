@@ -1,16 +1,19 @@
 import { model, Schema, Document, Types } from 'mongoose';
 
 interface Delivery extends Document {
-  batch_ref: Types.ObjectId;
+  // One delivery per pool: created by an admin once the pool has reached its
+  // target (see DeliveryController.create), never by a retailer/supplier.
+  pool_ref: Types.ObjectId;
   deliveryStatus: 'PENDING' | 'DELIVERING' | 'DELIVERED';
   deliveredAt: Date | 'Not Set';
 }
 
 const deliverySchema = new Schema<Delivery>({
-  batch_ref: {
+  pool_ref: {
     type: Types.ObjectId,
-    ref: 'Batch',
+    ref: 'Pool',
     required: true,
+    unique: true,
   },
   deliveryStatus: {
     type: String,

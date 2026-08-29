@@ -16,7 +16,7 @@ Before writing this, the following were inspected directly (not assumed from doc
 - Done: `tokenMiddleware` (`src/middlewares/token.middleware.ts`) decodes and attaches `role` onto `req.meta.user`, not just `userId`. Covered by `tests/middlewares/token.middleware.test.ts` and `tests/utils/jwt.util.test.ts`.
 - Done: `requireRole(...roles)` middleware now exists (`src/middlewares/require-role.middleware.ts`) — 401 if no `req.meta.user`, 403 if role not in the allowed set. Covered by `tests/middlewares/require-role.middleware.test.ts`.
 - Done: `scripts/seed-admins.ts` (`npm run seed:admins`) seeds the two predefined admin accounts from `SEED_ADMIN_{1,2}_EMAIL`/`_PASSWORD` env vars, idempotent, no public endpoint involved.
-- **Only partially rolled out:** `tokenMiddleware`/`requireRole('ADMIN')` were applied to `DELETE` on exactly three entities — `complaints`, `pools`, `product.offers` — plus `tokenMiddleware` on `GET /complaints` (with a role-aware `list()` override: admins see all complaints, everyone else only their own, tested in `tests/services/complaints.controller.test.ts`). Every other route in the app, including `DELETE` on `addresses`, `deliveries`, `pool.participants`, `distribution.batches`, `payments`, `notifications`, `shipments`, `supplier.payouts`, `products`, and `users`, is still completely unauthenticated (confirmed by grep of every `*.routes.ts` on 2026-08-29).
+- **Only partially rolled out:** full `tokenMiddleware`/`requireRole` coverage exists on `complaints` (§5) and `deliveries` (§4). `DELETE` also requires `requireRole('ADMIN')` on `pools` and `product.offers`. Every other route in the app, including `DELETE` on `addresses`, `pool.participants`, `payments`, `notifications`, `supplier.payouts`, `products`, and `users`, is still completely unauthenticated (confirmed by grep of every `*.routes.ts` on 2026-08-29). `shipments`/`distribution.batches` were removed entirely this session (§4) rather than authenticated.
 - `createUserSchema`/`registerSchema` still correctly omit `role` from client input.
 
 **Still needed:** apply `tokenMiddleware` (+ `requireRole` where relevant) to the remaining routes this spec covers — every section below (§2–§10) still assumes no auth exists on its routes except where explicitly noted otherwise.
@@ -50,16 +50,19 @@ Before writing this, the following were inspected directly (not assumed from doc
 
 ## 4. Delivery Assignment
 
-- Already implemented: `Shipment`, `DistributionBatch` (with `assignedDriver: {name, phone}`), and `Delivery` all exist as real models with generic CRUD + Zod schemas (added this session). No new model is needed here.
-- Missing: any linkage between them. Today, assigning a delivery to a pool that hit its target means three independent, uncoordinated calls (`POST /shipments`, then `POST /batches` referencing it, then `POST /deliveries` referencing that) with nothing validating they're consistent with each other or with the `Pool`, and nothing advancing `Pool.status` as a side effect.
-- Missing: a single admin-facing "assign delivery" action, and a way to view "the delivery for this pool" without manually walking `Pool → Shipment → DistributionBatch → Delivery` by hand across four separate `GET`s.
+**Simplified this session**: `Shipment` and `DistributionBatch` were removed entirely from the MVP — they carried no linkage/validation logic anyway (the gap this section used to describe) and added three uncoordinated CRUD endpoints for no behavior. `Delivery` now relates directly to `Pool`.
+
+- `Delivery.pool_ref` (unique — one delivery per pool) replaces the old `batch_ref`. `DeliveryController.create()` enforces: the pool must exist (404), `Pool.status` must not be `OPEN`/`CANCELLED` (409 otherwise — i.e. the pool must have reached its target), and no delivery may already exist for that pool (409 otherwise).
+- `POST/PATCH/DELETE /deliveries` all require `tokenMiddleware` + `requireRole('ADMIN')` — only an admin manages deliveries.
+- `GET /deliveries`(`/:id`) require `tokenMiddleware` and are role-aware: ADMIN sees/fetches every delivery; RETAILER sees deliveries for pools they've joined (via `PoolParticipant`); SUPPLIER sees deliveries for pools built from their own products (`Pool.productoffer_ref -> ProductOffer.product_ref -> Product.user_ref`).
+- Still missing: any notification triggered when a delivery is created or its status changes (see §9).
 
 ---
 
 ## 5. Complaints
 
 - Already implemented: `Complaint` model — restructured (this session) to `pool_ref` -> Pool and `creator_ref` -> User (the retailer or supplier who filed it) in place of the original `delivery_ref`/`retailer_ref`, plus `title`, `description`, `priority: LOW|MEDIUM|HIGH`, `status: OPEN|'UNDER REVIEW'|RESOLVED`, `resolution`. Generic CRUD + Zod schemas.
-- Note: a complaint is now tied to a `Pool`, not a `Delivery` — an admin walks `Pool` -> `ProductOffer`/`PoolParticipant`/`Shipment`/`Delivery` from `pool_ref` to get the details needed to act, rather than the complaint carrying a direct delivery link.
+- Note: a complaint is now tied to a `Pool`, not a `Delivery` — an admin walks `Pool` -> `ProductOffer`/`PoolParticipant`/`Delivery` from `pool_ref` to get the details needed to act, rather than the complaint carrying a direct delivery link.
 - **Missing entirely:** a conversation/message model. There is no `ComplaintMessage` (or similar) anywhere in the codebase — `grep` for "message" under `src/services` returns nothing. `Complaint.resolution` is a single free-text field, not a thread. "Exchange messages with the relevant party" has zero backing today.
 - Missing: a field/mechanism to record whether the root cause was the supplier or OrderPool/business operations — no such field exists on `Complaint`.
 - Missing: `status` is **not** in `Complaint.couldBeUpdated` (`['title', 'description', 'priority', 'resolution']`) — so even the existing 3-value status can't be moved via the API today.
@@ -102,7 +105,7 @@ Before writing this, the following were inspected directly (not assumed from doc
 
 - The status-based soft-close pattern (`ProductOffer.status`, `Pool.status`, `Complaint.status`) already exists and is the right mechanism — no new soft-delete concept is needed, matching the spec's instruction.
 - **Partially fixed (commit `0af128a`):** `DELETE` on `complaints`, `pools`, and `product.offers` now requires `tokenMiddleware` + `requireRole('ADMIN')`.
-- **Active violation on every other entity:** every entity's generic `BaseController.delete()` still does a real `this.model.deleteOne(...)` — a hard delete — and `DELETE /:_id` on `addresses`, `deliveries`, `pool.participants`, `distribution.batches`, `payments`, `notifications`, `shipments`, `supplier.payouts`, `products`, and `users` is still wired up with zero authentication (confirmed by grep on 2026-08-29). Anyone can still `DELETE /api/v1/users/:id` and permanently destroy a historical record. This needs the same `tokenMiddleware` + `requireRole('ADMIN')` treatment applied to the rest.
+- **Active violation on every other entity:** every entity's generic `BaseController.delete()` still does a real `this.model.deleteOne(...)` — a hard delete — and `DELETE /:_id` on `addresses`, `pool.participants`, `payments`, `notifications`, `supplier.payouts`, `products`, and `users` is still wired up with zero authentication (confirmed by grep on 2026-08-29; `deliveries` closed this session, §4). Anyone can still `DELETE /api/v1/users/:id` and permanently destroy a historical record. This needs the same `tokenMiddleware` + `requireRole('ADMIN')` treatment applied to the rest.
 
 ---
 
@@ -123,7 +126,8 @@ Already implemented:
 - User model covering all three roles (ADMIN/SUPPLIER/RETAILER), no separate collections needed
 - ProductOffer model + status enum (PENDING/NEGOTIATION/APPROVED/REJECTED) — vocabulary already matches the spec
 - Pool model + status enum (OPEN/TARGET_REACHED/DISTRIBUTING/COMPLETED/CANCELLED)
-- Shipment, DistributionBatch (with assignedDriver), Delivery models — full fulfillment chain exists
+- Delivery model tied directly to Pool (`pool_ref`, unique) — Shipment/DistributionBatch removed from the MVP this session (§4)
+- Delivery access control: create/update/delete ADMIN-only (with pool-readiness + one-per-pool checks); retailer/supplier list/get scoped to their own pools (§4)
 - Complaint model with pool_ref/creator_ref/priority/status/resolution
 - Notification model with recipient_ref array, actionUrl, priority, isRead/readAt (couldBeUpdated fixed this session)
 - Generic CRUD + Zod validation for every entity above
@@ -144,7 +148,7 @@ Missing:
 - Reject-offer workflow (reason required -> set REJECTED -> notify supplier)
 - Query filtering/pagination on list() (blocks "active vs pending vs historical" everywhere)
 - Pool -> participants view; Pool target-reached auto status transition
-- Coordinated delivery-assignment action across Shipment/DistributionBatch/Delivery + Pool status update
+- Notification triggered when a delivery is created or its status changes (§9)
 - Complaint conversation/message thread; supplier-vs-OrderPool fault classification; complaint-driven notifications
 - Supplier-by-role filtering / supplier profile aggregation
 - Entire SupplierRequest workflow (model, approve/reject actions, emails)
@@ -156,7 +160,7 @@ Needs model:
 
 Needs controller/service:
 - ProductOffer: approve / requestNegotiation / reject actions
-- Pool: assignDelivery action; participants-by-pool listing
+- Pool: participants-by-pool listing (delivery creation is now handled directly by `DeliveryController.create()`, §4 — no separate Pool action needed)
 - Complaint: add message; classify fault; status transition
 - SupplierRequest: full controller (create/list/approve/reject)
 - Cross-cutting: generic query-filter support in BaseController.list (or a documented override pattern) — role-checking middleware itself now exists (`requireRole`, §1), just not applied broadly yet
@@ -166,7 +170,7 @@ Needs route:
 - POST /pools/:id/assign-delivery, GET /pools/:id/participants
 - POST /complaints/:id/messages, PATCH .../classify
 - Full /supplier-requests CRUD + /supplier-requests/:id/approve|reject
-- `tokenMiddleware` + `requireRole` (both already built, §1) applied across all of the above and to the remaining unauthenticated sensitive routes (DELETE on addresses, deliveries, pool.participants, distribution.batches, payments, notifications, shipments, supplier.payouts, products, users)
+- `tokenMiddleware` + `requireRole` (both already built, §1) applied across all of the above and to the remaining unauthenticated sensitive routes (DELETE on addresses, pool.participants, payments, notifications, supplier.payouts, products, users)
 
 Needs validation:
 - Zod schemas for every new route above (approve/reject/negotiate payloads, assign-delivery payload, SupplierRequest create, message create)

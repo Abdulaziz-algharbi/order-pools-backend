@@ -3,7 +3,6 @@
 @userID="6a71c282ec9d84c27d309e8d"
 @poolId="6a8136f57464a01bfe7222c8"
 @paymentId="6a86e66b698536e9980baa15"
-@deliveryId="6a86e30a1ae6373324cdc94f"
 
 
 ### create poolParticipant
@@ -15,7 +14,6 @@ Content-Type: application/json
     "user_ref": {{userID}},
     "pool_ref": {{poolId}},
     "payment_ref": {{paymentId}},
-    "delivery_ref": {{deliveryId}},
     "quantity": 15
 }
 
@@ -56,11 +54,6 @@ DELETE {{baseUrl}}/{{poolParticipantId}}
 #       type: Types.ObjectId,
 #       ref: 'Payment',
 #       required: true,
-#     },
-#     delivery_ref: {
-#       type: Types.ObjectId,
-#       ref: 'Delivery',
-#       default: 'NOT SET',
 #     },
 #     quantity: {
 #       type: Number,

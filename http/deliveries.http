@@ -1,42 +1,49 @@
 @baseUrl=http://localhost:8000/api/v1/deliveries
 @deliveryId=6a86e30a1ae6373324cdc94f
-@batchId="6a86e28d5cd9e412c490d787"
+@poolId="6a86e28d5cd9e412c490d787"
+@accessToken=""
 
-### create delivery
+### create delivery (ADMIN only — pool must be TARGET_REACHED/DISTRIBUTING/COMPLETED, one per pool)
 
 POST {{baseUrl}}
 Content-Type: application/json
+Authorization: Bearer {{accessToken}}
 
 {
-    "batch_ref": {{batchId}}
+    "pool_ref": {{poolId}}
 }
 
-### list deliveries
+### list deliveries (ADMIN sees all; RETAILER sees pools they joined; SUPPLIER sees pools built from their products)
 
 GET {{baseUrl}}
+Authorization: Bearer {{accessToken}}
 
 ### get delivery by id
 
 GET {{baseUrl}}/{{deliveryId}}
+Authorization: Bearer {{accessToken}}
 
-### update delivery
+### update delivery (ADMIN only)
 
 PATCH {{baseUrl}}/{{deliveryId}}
 Content-Type: application/json
+Authorization: Bearer {{accessToken}}
 
 {
     "deliveryStatus": "DELIVERED"
 }
 
-### delete delivery
+### delete delivery (ADMIN only)
 
 DELETE {{baseUrl}}/{{deliveryId}}
+Authorization: Bearer {{accessToken}}
 
 # const deliverySchema = new Schema<Delivery>({
-#   batch_ref: {
+#   pool_ref: {
 #     type: Types.ObjectId,
-#     ref: 'Batch',
+#     ref: 'Pool',
 #     required: true,
+#     unique: true,
 #   },
 #   deliveryStatus: {
 #     type: String,

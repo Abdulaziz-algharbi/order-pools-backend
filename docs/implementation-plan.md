@@ -4,7 +4,7 @@
 
 ## Done
 
-- Mongoose models for every core entity (`User`, `Address`, `Product`, `ProductOffer`, `Pool`, `PoolParticipant`, `Payment`, `Shipment`, `DistributionBatch`, `Delivery`, `Complaint`, `SupplierPayout`, `Notification`, `Auth`, `Email`), each with a `couldBeUpdated` whitelist for patchable fields.
+- Mongoose models for every core entity (`User`, `Address`, `Product`, `ProductOffer`, `Pool`, `PoolParticipant`, `Payment`, `Delivery`, `Complaint`, `SupplierPayout`, `Notification`, `Auth`, `Email`), each with a `couldBeUpdated` whitelist for patchable fields. `Shipment`/`DistributionBatch` were removed from the MVP — `Delivery` now relates directly to `Pool` via a unique `pool_ref` (see `docs/unimplemented-features.md` §4).
 - Generic CRUD wired end-to-end (routes -> controller -> model) for every service above, mounted under `/api/v1/*` in `src/routes/api/v1/index.ts`.
 - Auth: `POST /auth/register` (creates `User` + `Auth`, emits `user:registered`), `POST /auth/login`, `POST /auth/refresh`, `GET /auth/me` (token-protected), `GET /auth/verify/:token`.
 - Email-on-registration flow: `auth` -> `AppBroker` event -> `emails` listener -> nodemailer send + `Email` log, using the shared registry/broker pattern.
@@ -22,16 +22,16 @@
 
 **Authorization**
 - `tokenMiddleware` only verifies token validity; it does not read or attach the user's `role`, and there is no role-based (`ADMIN`/`SUPPLIER`/`RETAILER`) authorization middleware anywhere.
-- Almost no routes apply `tokenMiddleware` at all — currently only `GET /auth/me`. Every other endpoint (products, pools, offers, payments, shipments, batches, deliveries, complaints, payouts, notifications, users, addresses CRUD) is open with no authentication check.
+- Most routes still don't apply `tokenMiddleware` — see `docs/unimplemented-features.md` §1/§11 for current, per-route coverage (`complaints` and `deliveries` are now fully authenticated; most other entities' CRUD is still open with no authentication check).
 - There is no ownership/ACL enforcement (e.g. only the owning supplier should update their `Product`; only `ADMIN` should set `ProductOffer.status`; a retailer should only update their own `PoolParticipant`). `BaseController.update` will happily apply any `couldBeUpdated` field for any caller.
 
 **Validation**
-- No Zod schemas exist yet for `products`, `productOffers`, `pools`, `poolParticipants`, `payments`, `shipments`, `distributionBatches`, `deliveries`, `complaints`, `supplierPayouts`, or `notifications` — their routes pass `req.body` straight into `new this.model(req.body)`, relying only on Mongoose schema validation.
+- Zod schema coverage is uneven across services — verify the specific service's `*.schema.ts` before assuming validation is or isn't wired up; `shipments`/`distributionBatches` no longer exist (removed from the MVP).
 
 **Core Business Logic**
 - No pool-join operation exists beyond generic `PoolParticipant` create — joining a pool should atomically create the `PoolParticipant`, increment `Pool.currentQuantity`, and place a `Payment` hold; none of that orchestration, nor the concurrency control it needs (e.g. a transaction/session, or an atomic `$inc` with a bound check to avoid overshooting `Pool` capacity), currently exists.
 - No logic drives `Pool.status` transitions (`OPEN -> TARGET_REACHED -> DISTRIBUTING -> COMPLETED -> CANCELLED`) — the field exists but nothing computes or enforces it.
-- No logic drives `Shipment`/`DistributionBatch`/`Delivery` status progression or the handoff between them beyond the raw refs.
+- No logic drives `Delivery.deliveryStatus` progression (`PENDING -> DELIVERING -> DELIVERED`) beyond raw `PATCH` — creation itself is now gated on `Pool.status` (see `docs/unimplemented-features.md` §4).
 - No payout calculation logic for `SupplierPayout` (`grossAmount`/`platformCommission`/`netAmount`) — the model has a comment noting "need to be reviewed to do the calculation in the backend."
 - No Stripe (or other payment provider) integration — `stripeCustomerId`, `stripePaymentMehtodId` (typo, not fixed here since it's existing field naming), and `stripePaymentIntentId` exist as schema fields only; no `stripe` package is installed and no charge/capture/refund flow exists.
 - No transactions/sessions used anywhere in the codebase, despite several flows above needing atomicity across multiple documents.

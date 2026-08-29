@@ -4,7 +4,6 @@ export interface PoolParticipant extends Document {
   user_ref: Types.ObjectId;
   pool_ref: Types.ObjectId;
   payment_ref: Types.ObjectId;
-  delivery_ref: Types.ObjectId | 'NOT SET';
   quantity: number;
   status: 'WAITING' | 'REFUNDED' | 'DELIVERED';
   joinedAt: Date;
@@ -27,17 +26,6 @@ const poolParticipantSchema = new Schema<PoolParticipant>(
       type: Types.ObjectId,
       ref: 'Payment',
       required: true,
-    },
-    delivery_ref: {
-      type: Schema.Types.Mixed,
-      validate: {
-        validator: function (v) {
-          return typeof v === 'string' || v instanceof Types.ObjectId;
-        },
-        message: (props) => `${props.value} is not a valid string or date`,
-      },
-      ref: 'Delivery',
-      default: 'NOT SET',
     },
     quantity: {
       type: Number,
