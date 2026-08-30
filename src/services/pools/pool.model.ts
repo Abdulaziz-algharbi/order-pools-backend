@@ -25,6 +25,11 @@ const poolSchema = new Schema<Pool>(
     currentQuantity: { type: Number, required: true },
     minimumContribution: { type: Number, required: true },
     pricePerUnit: { type: Number, required: true },
+    // Defaults to creation time, like createdAt — but unlike createdAt,
+    // an admin may reset it (via couldBeUpdated) if a CANCELLED pool is
+    // reopened back to OPEN, since the pool's collection window is
+    // effectively restarting.
+    startDate: { type: Date, default: Date.now },
     endDate: { type: Date, required: true },
     status: {
       type: String,

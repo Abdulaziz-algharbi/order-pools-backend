@@ -191,3 +191,113 @@ describe('ComplaintController.getById', () => {
     expect(res.status).toHaveBeenCalledWith(200);
   });
 });
+
+describe('ComplaintController.update', () => {
+  it('returns 401 when there is no authenticated user', async () => {
+    const req = { meta: {}, params: { _id: '1' } } as unknown as Request;
+    const res = mockRes();
+
+    await complaintController.update(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(mockFindById).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 when the complaint does not exist', async () => {
+    mockFindById.mockResolvedValue(null);
+    const req = {
+      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      params: { _id: 'missing' },
+      body: { title: 'new title' },
+    } as unknown as Request;
+    const res = mockRes();
+
+    await complaintController.update(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+  });
+
+  it("returns 403 when a non-admin updates a complaint they didn't file", async () => {
+    const doc = { creator_ref: 'someone-else', save: jest.fn() };
+    mockFindById.mockResolvedValue(doc);
+    const req = {
+      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      params: { _id: '1' },
+      body: { title: 'new title' },
+    } as unknown as Request;
+    const res = mockRes();
+
+    await complaintController.update(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(doc.save).not.toHaveBeenCalled();
+  });
+
+  it('lets the owner update title/description/priority', async () => {
+    const doc: any = {
+      creator_ref: 'retailer-1',
+      title: 'old',
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    mockFindById.mockResolvedValue(doc);
+    const req = {
+      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      params: { _id: '1' },
+      body: { title: 'new title', priority: 'HIGH' },
+    } as unknown as Request;
+    const res = mockRes();
+
+    await complaintController.update(req, res);
+
+    expect(doc.title).toBe('new title');
+    expect(doc.priority).toBe('HIGH');
+    expect(doc.save).toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('silently ignores status/resolution when the owner (non-admin) sends them', async () => {
+    const doc: any = {
+      creator_ref: 'retailer-1',
+      status: 'OPEN',
+      resolution: undefined,
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    mockFindById.mockResolvedValue(doc);
+    const req = {
+      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      params: { _id: '1' },
+      body: { status: 'RESOLVED', resolution: 'self-resolved' },
+    } as unknown as Request;
+    const res = mockRes();
+
+    await complaintController.update(req, res);
+
+    expect(doc.status).toBe('OPEN');
+    expect(doc.resolution).toBeUndefined();
+    expect(doc.save).toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('lets ADMIN update status and resolution on a complaint they did not file', async () => {
+    const doc: any = {
+      creator_ref: 'someone-else',
+      status: 'OPEN',
+      resolution: undefined,
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    mockFindById.mockResolvedValue(doc);
+    const req = {
+      meta: { user: { userId: 'admin-1', role: 'ADMIN' } },
+      params: { _id: '1' },
+      body: { status: 'RESOLVED', resolution: 'refunded the retailer' },
+    } as unknown as Request;
+    const res = mockRes();
+
+    await complaintController.update(req, res);
+
+    expect(doc.status).toBe('RESOLVED');
+    expect(doc.resolution).toBe('refunded the retailer');
+    expect(doc.save).toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+});

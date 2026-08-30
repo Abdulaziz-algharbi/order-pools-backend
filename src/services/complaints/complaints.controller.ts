@@ -3,6 +3,10 @@ import BaseController from '../base/base.controller';
 import complaintModel, { couldBeUpdated } from './complaint.model';
 import ERRORS from '../../constants/ERRORS';
 
+// A non-admin owner may only touch these fields; ADMIN may touch anything
+// in `couldBeUpdated` (including status/resolution).
+const OWNER_UPDATABLE_FIELDS = ['title', 'description', 'priority'];
+
 class ComplaintController extends BaseController {
   constructor() {
     super(complaintModel, couldBeUpdated);
@@ -76,6 +80,54 @@ class ComplaintController extends BaseController {
       });
     } catch (error) {
       this.logger.error(`Retrieving specified document: ${error}`);
+      res.status(500).send({ message: 'Internal server error' });
+    }
+  }
+
+  // The owner (whoever filed it) may only patch title/description/
+  // priority. ADMIN may patch any field on the complaint, whether or not
+  // they filed it — including status/resolution, which the owner cannot
+  // touch. Written directly (rather than delegating to BaseController.update,
+  // which only knows one static allowed-fields list) since the allowed set
+  // here depends on which caller is making the request.
+  async update(req: Request, res: Response): Promise<void> {
+    try {
+      const user = req.meta.user;
+      if (!user) {
+        res.status(401).send({ message: 'Access token is missing' });
+        return;
+      }
+
+      const doc = await this.model.findById(req.params._id);
+      if (!doc) {
+        res.status(404).send({ message: 'Document not Found', data: null });
+        return;
+      }
+
+      let allowedFields: string[];
+      if (user.role === 'ADMIN') {
+        allowedFields = this.allowedFields;
+      } else if (doc.creator_ref.toString() === user.userId) {
+        allowedFields = OWNER_UPDATABLE_FIELDS;
+      } else {
+        res.status(403).send({ message: ERRORS.UNAUTHORIZED });
+        return;
+      }
+
+      for (const field of Object.keys(req.body)) {
+        if (allowedFields.includes(field)) {
+          doc[field] = req.body[field];
+        }
+      }
+      await doc.save();
+
+      this.logger.info(`${this.model.modelName} Updated`);
+      res.status(200).send({
+        message: 'Document updated successfully',
+        data: doc,
+      });
+    } catch (error) {
+      this.logger.error(`${this.model.modelName} Update: ${error}`);
       res.status(500).send({ message: 'Internal server error' });
     }
   }

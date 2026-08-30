@@ -26,14 +26,26 @@ Authorization: Bearer {{accessToken}}
 GET {{baseUrl}}/{{complaintId}}
 Authorization: Bearer {{accessToken}}
 
-### update complaint
+### update complaint, owner (title/description/priority only — status and resolution are silently ignored)
 
 PATCH {{baseUrl}}/{{complaintId}}
 Content-Type: application/json
+Authorization: Bearer {{accessToken}}
 
 {
     "title": "I Received different product",
     "description": "I ordered rice but got lemon!"
+}
+
+### update complaint, ADMIN (any field, including status/resolution, whoever filed it)
+
+PATCH {{baseUrl}}/{{complaintId}}
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+    "status": "RESOLVED",
+    "resolution": "Refunded the retailer for the 5 extra pieces."
 }
 
 ### delete complaint (ADMIN only)

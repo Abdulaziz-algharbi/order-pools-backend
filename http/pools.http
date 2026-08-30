@@ -48,6 +48,18 @@ Authorization: Bearer {{adminAccessToken}}
     "pricePerUnit": 7
 }
 
+### reopen a CANCELLED pool (ADMIN only) — resets startDate as the collection window restarts
+
+PATCH {{baseUrl}}/{{poolId}}
+Content-Type: application/json
+Authorization: Bearer {{adminAccessToken}}
+
+{
+    "status": "OPEN",
+    "startDate": "2026-09-01T00:00:00Z",
+    "endDate": "2026-09-15T00:00:00Z"
+}
+
 ### delete pool (ADMIN only)
 
 DELETE {{baseUrl}}/{{poolId}}

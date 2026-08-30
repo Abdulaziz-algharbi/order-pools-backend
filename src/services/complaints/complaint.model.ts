@@ -51,11 +51,16 @@ const complaintSchema = new Schema<Complaint>({
   },
 });
 
+// The full set an ADMIN may patch. A non-admin owner is restricted to a
+// smaller subset (title/description/priority) — see
+// ComplaintController.update, since that restriction is per-caller and
+// can't be expressed as one static whitelist.
 export const couldBeUpdated = [
   'title',
   'description',
   'priority',
   'resolution',
+  'status',
 ];
 
 const complaintModel = model<Complaint>('Complaint', complaintSchema);

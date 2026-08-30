@@ -15,13 +15,17 @@ export const createComplaintSchema = z
 
 export type CreateComplaintInput = z.infer<typeof createComplaintSchema>;
 
-// mirrors complaint.model.ts `couldBeUpdated` — keep both in sync
+// mirrors complaint.model.ts `couldBeUpdated` — keep both in sync. Which
+// of these fields a given caller may actually set is enforced in
+// ComplaintController.update (owner: title/description/priority only;
+// ADMIN: all of them, including status/resolution).
 export const updateComplaintSchema = z
   .object({
     title: z.string().trim().min(1).max(255).optional(),
     description: z.string().trim().min(1).max(2000).optional(),
     priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).optional(),
     resolution: z.string().trim().min(1).max(2000).optional(),
+    status: z.enum(['OPEN', 'UNDER REVIEW', 'RESOLVED']).optional(),
   })
   .strict()
   .refine((data) => Object.keys(data).length > 0, {

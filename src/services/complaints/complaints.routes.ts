@@ -22,6 +22,7 @@ router
   .route('/:_id')
   .get(tokenMiddleware, complaintController.getById.bind(complaintController))
   .patch(
+    tokenMiddleware,
     validate(updateComplaintSchema),
     complaintController.update.bind(complaintController)
   )
