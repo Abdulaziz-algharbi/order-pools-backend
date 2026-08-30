@@ -1,12 +1,15 @@
 @baseUrl=http://localhost:8000/api/v1/pools
 @poolId=6a8136f57464a01bfe7222c8
 @productOfferId="6a7c25d44c99595aa3ec7389"
+@adminAccessToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2YTcxYzU4YmVjN2VlOTQ2M2FlYWNjNDAiLCJyb2xlIjoiQURNSU4iLCJpYXQiOjE3ODgwNzQ1NzYsImV4cCI6MTc4ODA3ODE3Nn0.oP71agPnc5ewwm9ATOBj0slT3rdpe4aYyUuvZWepXyc
+@supplierAccessToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2YTcxYzU4YmVjN2VlOTQ2M2FlYWNjNDAiLCJyb2xlIjoiU1VQUExJRVIiLCJpYXQiOjE3ODgwNzQ1NzYsImV4cCI6MTc4ODA3ODE3Nn0.oP71agPnc5ewwm9ATOBj0slT3rdpe4aYyUuvZWepXyc
 
 
-### create pool
+### create pool (ADMIN only)
 
 POST {{baseUrl}}
 Content-Type: application/json
+Authorization: Bearer {{adminAccessToken}}
 
 {
     "productoffer_ref": {{productOfferId}},
@@ -16,27 +19,39 @@ Content-Type: application/json
     "endDate": "2026-08-29T14:30:00Z"
 }
 
-### list pools
+### list pools, anonymous or RETAILER (only OPEN pools)
 
 GET {{baseUrl}}
+
+### list pools, SUPPLIER (only pools built from their own products, any status)
+
+GET {{baseUrl}}
+Authorization: Bearer {{supplierAccessToken}}
+
+### list pools, ADMIN (every pool)
+
+GET {{baseUrl}}
+Authorization: Bearer {{adminAccessToken}}
 
 ### get pool by id
 
 GET {{baseUrl}}/{{poolId}}
 
-### update pool
+### update pool (ADMIN only)
 
 PATCH {{baseUrl}}/{{poolId}}
 Content-Type: application/json
+Authorization: Bearer {{adminAccessToken}}
 
 {
     "minimumContribution": 12,
     "pricePerUnit": 7
 }
 
-### delete pool
+### delete pool (ADMIN only)
 
 DELETE {{baseUrl}}/{{poolId}}
+Authorization: Bearer {{adminAccessToken}}
 
 
 #     productoffer_ref: {
