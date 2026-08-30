@@ -4,6 +4,7 @@ export interface PoolParticipant extends Document {
   user_ref: Types.ObjectId;
   pool_ref: Types.ObjectId;
   payment_ref: Types.ObjectId;
+  address_ref: Types.ObjectId;
   quantity: number;
   status: 'WAITING' | 'REFUNDED' | 'DELIVERED';
   joinedAt: Date;
@@ -25,6 +26,14 @@ const poolParticipantSchema = new Schema<PoolParticipant>(
     payment_ref: {
       type: Types.ObjectId,
       ref: 'Payment',
+      required: true,
+    },
+    // Delivery address for this participant's share of the pool — must be
+    // one of user_ref's own addresses (checked in the controller, since
+    // Mongoose validators can't reach across User.addresses here).
+    address_ref: {
+      type: Types.ObjectId,
+      ref: 'Address',
       required: true,
     },
     quantity: {

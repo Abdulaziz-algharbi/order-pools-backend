@@ -3,9 +3,12 @@ import { objectId } from '../../utils/zod.util';
 
 export const createPoolParticipantSchema = z
   .object({
-    user_ref: objectId('Invalid user ID'),
+    // No user_ref here: a participant is always the authenticated caller
+    // (RETAILER, enforced by requireRole on the route).
+    // PoolParticipantController.create sets it from the session, never the client.
     pool_ref: objectId('Invalid pool ID'),
     payment_ref: objectId('Invalid payment ID'),
+    address_ref: objectId('Invalid address ID'),
     quantity: z.number().positive(),
   })
   .strict();

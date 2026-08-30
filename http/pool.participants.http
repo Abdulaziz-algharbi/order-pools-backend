@@ -1,42 +1,53 @@
 @baseUrl=http://localhost:8000/api/v1/participants
 @poolParticipantId=6a86e7aea09200db9b140cfa
-@userID="6a71c282ec9d84c27d309e8d"
 @poolId="6a8136f57464a01bfe7222c8"
 @paymentId="6a86e66b698536e9980baa15"
+@addressId="6a86e66b698536e9980baa20"
+@accessToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2YTcxYzU4YmVjN2VlOTQ2M2FlYWNjNDAiLCJyb2xlIjoiUkVUQUlMRVIiLCJpYXQiOjE3ODgwNzQ1NzYsImV4cCI6MTc4ODA3ODE3Nn0.oP71agPnc5ewwm9ATOBj0slT3rdpe4aYyUuvZWepXyc
 
 
-### create poolParticipant
+### create poolParticipant (RETAILER only — user_ref is derived from the token, not sent)
 
 POST {{baseUrl}}
 Content-Type: application/json
+Authorization: Bearer {{accessToken}}
 
 {
-    "user_ref": {{userID}},
     "pool_ref": {{poolId}},
     "payment_ref": {{paymentId}},
+    "address_ref": {{addressId}},
     "quantity": 15
 }
 
-### list poolParticipants
+### list poolParticipants (ADMIN sees all; anyone else only their own)
 
 GET {{baseUrl}}
+Authorization: Bearer {{accessToken}}
+
+### list poolParticipants for a given pool (ADMIN use case: see everyone in a pool)
+
+GET {{baseUrl}}?pool_ref={{poolId}}
+Authorization: Bearer {{accessToken}}
 
 ### get poolParticipant by id
 
 GET {{baseUrl}}/{{poolParticipantId}}
+Authorization: Bearer {{accessToken}}
 
-### update poolParticipant
+### update poolParticipant (RETAILER, own participant only, only while the pool is still OPEN)
 
 PATCH {{baseUrl}}/{{poolParticipantId}}
 Content-Type: application/json
+Authorization: Bearer {{accessToken}}
 
 {
     "quantity": 12
 }
 
-### delete pool
+### delete poolParticipant (RETAILER, own participant only — pool OPEN, COMPLETED, or CANCELLED 7+ days ago)
 
 DELETE {{baseUrl}}/{{poolParticipantId}}
+Authorization: Bearer {{accessToken}}
 
 
 # // Ref_ID user ID, pool ID and payment ID (hold) are required
