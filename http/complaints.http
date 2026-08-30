@@ -1,7 +1,7 @@
 @baseUrl=http://localhost:8000/api/v1/complaints
 @complaintId=6a86e34c1ae6373324cdc951
 @poolId="6a86e30a1ae6373324cdc94f"
-@accessToken=""
+@accessToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2YTcxYzU4YmVjN2VlOTQ2M2FlYWNjNDAiLCJyb2xlIjoiQURNSU4iLCJpYXQiOjE3ODgwNzQ1NzYsImV4cCI6MTc4ODA3ODE3Nn0.oP71agPnc5ewwm9ATOBj0slT3rdpe4aYyUuvZWepXyc
 
 ### create complaint (RETAILER or SUPPLIER only — creator_ref is derived from the token, not sent; ADMIN gets 403)
 
@@ -11,7 +11,7 @@ Authorization: Bearer {{accessToken}}
 
 {
     "pool_ref": {{poolId}},
-    "title": "not the agreed number",
+    "title": "not the agreed number anothor retailer",
     "description": "I bought 20 pieces, but I got 25"
 
 }

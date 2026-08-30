@@ -1,7 +1,10 @@
 @baseUrl=http://localhost:8000/api/v1/addresses
 @addressId=6a7c2ad3f389f6ed96dc98e5
+@targetUserId=6a71c282ec9d84c27d309e8d
+@accessToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2YTcxYzU4YmVjN2VlOTQ2M2FlYWNjNDAiLCJyb2xlIjoiUkVUQUlMRVIiLCJpYXQiOjE3ODgwNzQ1NzYsImV4cCI6MTc4ODA3ODE3Nn0.oP71agPnc5ewwm9ATOBj0slT3rdpe4aYyUuvZWepXyc
+@adminAccessToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2YTcxYzU4YmVjN2VlOTQ2M2FlYWNjNDAiLCJyb2xlIjoiQURNSU4iLCJpYXQiOjE3ODgwNzQ1NzYsImV4cCI6MTc4ODA3ODE3Nn0.oP71agPnc5ewwm9ATOBj0slT3rdpe4aYyUuvZWepXyc
 
-### create address
+### create address, anonymous (pre-registration bootstrap — not linked to any user)
 
 POST {{baseUrl}}
 Content-Type: application/json
@@ -12,18 +15,46 @@ Content-Type: application/json
     "city": "Masnaah"
 }
 
-### list addresses
+### create address, authenticated SUPPLIER/RETAILER (linked onto the caller's own account)
+
+POST {{baseUrl}}
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+    "location": "https://share.google/UCp92LzP4tQFfHXke",
+    "region": "Al-Batinah",
+    "city": "Masnaah"
+}
+
+### create address, ADMIN on behalf of a user (user_ref required; 400 without it, 404 if the user doesn't exist)
+
+POST {{baseUrl}}
+Content-Type: application/json
+Authorization: Bearer {{adminAccessToken}}
+
+{
+    "location": "https://share.google/UCp92LzP4tQFfHXke",
+    "region": "Al-Batinah",
+    "city": "Masnaah",
+    "user_ref": {{targetUserId}}
+}
+
+### list addresses (ADMIN sees all; SUPPLIER/RETAILER only their own)
 
 GET {{baseUrl}}
+Authorization: Bearer {{accessToken}}
 
-### get address by id
+### get address by id (own address, or any address for ADMIN)
 
 GET {{baseUrl}}/{{addressId}}
+Authorization: Bearer {{accessToken}}
 
-### update address
+### update address (own address for SUPPLIER/RETAILER, any address for ADMIN)
 
 PATCH {{baseUrl}}/{{addressId}}
 Content-Type: application/json
+Authorization: Bearer {{accessToken}}
 
 {
     "location": "https://maps.app.goo.gl/Ly51Sz3Zp5JpLqyS9",
@@ -31,9 +62,10 @@ Content-Type: application/json
     "city": "AboAbali"
 }
 
-### delete address
+### delete address (own address for SUPPLIER/RETAILER, any address for ADMIN)
 
 DELETE {{baseUrl}}/{{addressId}}
+Authorization: Bearer {{accessToken}}
 
 #   location: { type: String, required: true },
 #   region: { type: String, required: true },

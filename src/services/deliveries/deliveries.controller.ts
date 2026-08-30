@@ -1,12 +1,12 @@
 import { Request, Response } from 'express';
-import BaseController from '../base/base.controller';
-import deliveryModel, { couldBeUpdated } from './delivery.model';
-import poolModel from '../pools/pool.model';
-import poolParticipantModel from '../pool.participants/pool.participant.model';
-import productModel from '../products/product.model';
-import productOfferModel from '../product.offers/product.offer.model';
 import ERRORS from '../../constants/ERRORS';
+import BaseController from '../base/base.controller';
+import poolParticipantModel from '../pool.participants/pool.participant.model';
+import poolModel from '../pools/pool.model';
+import productOfferModel from '../product.offers/product.offer.model';
+import productModel from '../products/product.model';
 import type { UserRole } from '../users/user.model';
+import deliveryModel, { couldBeUpdated } from './delivery.model';
 
 // A pool can only receive a delivery once it has actually reached its
 // target — not while it's still OPEN (collecting contributions) or CANCELLED.
@@ -121,6 +121,7 @@ class DeliveryController extends BaseController {
 
   // Pool ids a non-admin caller is allowed to see a delivery for.
   private async visiblePoolIds(user: { userId: string; role: UserRole }) {
+    // TODO: need to be refined three requests to DB? redesign the data model
     if (user.role === 'SUPPLIER') {
       const productIds = await productModel.distinct('_id', {
         user_ref: user.userId,

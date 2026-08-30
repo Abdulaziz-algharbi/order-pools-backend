@@ -1,7 +1,4 @@
-import { Schema, model, Document, Types } from 'mongoose';
-
-// eslint-disable-next-line no-unused-vars
-import ProductOffer from '../product.offers/product.offer.model';
+import { Document, Schema, Types, model } from 'mongoose';
 
 export interface Pool extends Document {
   // Ref to the product offer
