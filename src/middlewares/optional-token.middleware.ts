@@ -24,7 +24,7 @@ const optionalTokenMiddleware = (
     const decoded = jwtUtil.verifyAccessToken(token) as JwtPayload | null;
     req.meta = {
       user: decoded?._id
-        ? { userId: decoded._id, role: decoded.role }
+        ? { userId: decoded._id, roles: decoded.roles }
         : undefined,
     };
   } catch {

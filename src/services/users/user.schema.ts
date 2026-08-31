@@ -1,7 +1,16 @@
 import z from 'zod';
 
+// This module is ADMIN only (see users.routes.ts) — a `roles` array may be
+// set directly, including on creation (e.g. to create another ADMIN or a
+// pre-approved SUPPLIER outright). Normal RETAILER -> SUPPLIER promotion
+// goes through supplier-requests approval instead.
+const rolesSchema = z
+  .array(z.enum(['ADMIN', 'SUPPLIER', 'RETAILER']))
+  .min(1, 'At least one role is required');
+
 export const createUserSchema = z
   .object({
+    roles: rolesSchema.optional(),
     firstName: z
       .string()
       .trim()
@@ -71,6 +80,7 @@ export const updateUserSchema = z
     commercialRegistration: z.string().trim().max(50).nullable().optional(),
     vatNumber: z.string().trim().max(50).nullable().optional(),
     profileImage: z.string().nullable().optional(),
+    roles: rolesSchema.optional(),
   })
   .strict()
   .refine((data) => Object.keys(data).length > 0, {

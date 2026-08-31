@@ -69,7 +69,7 @@ async function seedAdmin(seed: AdminSeed) {
     phoneNumber: seed.phone,
     companyName: 'OrderPool',
     password: seed.password, // hashed by the User pre('save') hook
-    role: 'ADMIN',
+    roles: ['ADMIN'],
     status: 'ACTIVE',
     isVerified: true,
     addresses: [placeholderAddress._id],

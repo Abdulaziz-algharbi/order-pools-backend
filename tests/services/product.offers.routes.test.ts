@@ -46,7 +46,7 @@ function mockRes() {
 
 function reqAs(role: string): Request {
   return {
-    meta: { user: { userId: 'caller-1', role } },
+    meta: { user: { userId: 'caller-1', roles: [role] } },
   } as unknown as Request;
 }
 

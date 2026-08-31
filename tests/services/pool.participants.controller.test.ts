@@ -62,7 +62,7 @@ describe('PoolParticipantController.create', () => {
       .spyOn(BaseController.prototype, 'create')
       .mockResolvedValue(undefined);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       body: { user_ref: 'someone-else', address_ref: 'addr-1' },
     } as unknown as Request;
     const res = mockRes();
@@ -78,7 +78,7 @@ describe('PoolParticipantController.create', () => {
   it('returns 404 when the authenticated user cannot be found', async () => {
     mockUserFindById.mockResolvedValue(null);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       body: { address_ref: 'addr-1' },
     } as unknown as Request;
     const res = mockRes();
@@ -91,7 +91,7 @@ describe('PoolParticipantController.create', () => {
   it("returns 400 when address_ref is not one of the caller's own addresses", async () => {
     mockUserFindById.mockResolvedValue({ addresses: ['addr-1'] });
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       body: { address_ref: 'addr-2' },
     } as unknown as Request;
     const res = mockRes();
@@ -116,7 +116,7 @@ describe('PoolParticipantController.list', () => {
   it('queries with an empty filter for ADMIN', async () => {
     mockFind.mockResolvedValue([{ _id: '1' }, { _id: '2' }]);
     const req = {
-      meta: { user: { userId: 'admin-1', role: 'ADMIN' } },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
       query: {},
     } as unknown as Request;
     const res = mockRes();
@@ -130,7 +130,7 @@ describe('PoolParticipantController.list', () => {
   it('lets ADMIN narrow to a single pool via ?pool_ref=', async () => {
     mockFind.mockResolvedValue([]);
     const req = {
-      meta: { user: { userId: 'admin-1', role: 'ADMIN' } },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
       query: { pool_ref: 'pool-1' },
     } as unknown as Request;
     const res = mockRes();
@@ -143,7 +143,7 @@ describe('PoolParticipantController.list', () => {
   it('scopes a RETAILER to their own participations', async () => {
     mockFind.mockResolvedValue([{ _id: '1' }]);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       query: {},
     } as unknown as Request;
     const res = mockRes();
@@ -156,7 +156,7 @@ describe('PoolParticipantController.list', () => {
   it('combines the RETAILER scope with a pool_ref filter', async () => {
     mockFind.mockResolvedValue([]);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       query: { pool_ref: 'pool-1' },
     } as unknown as Request;
     const res = mockRes();
@@ -184,7 +184,7 @@ describe('PoolParticipantController.getById', () => {
   it('returns 404 when the participant does not exist', async () => {
     mockFindById.mockResolvedValue(null);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: 'missing' },
     } as unknown as Request;
     const res = mockRes();
@@ -197,7 +197,7 @@ describe('PoolParticipantController.getById', () => {
   it("returns 403 when a retailer requests someone else's participant", async () => {
     mockFindById.mockResolvedValue({ user_ref: 'someone-else' });
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
     } as unknown as Request;
     const res = mockRes();
@@ -210,7 +210,7 @@ describe('PoolParticipantController.getById', () => {
   it('returns the participant for the retailer who owns it', async () => {
     mockFindById.mockResolvedValue({ user_ref: 'retailer-1' });
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
     } as unknown as Request;
     const res = mockRes();
@@ -223,7 +223,7 @@ describe('PoolParticipantController.getById', () => {
   it('lets ADMIN fetch any participant regardless of owner', async () => {
     mockFindById.mockResolvedValue({ user_ref: 'someone-else' });
     const req = {
-      meta: { user: { userId: 'admin-1', role: 'ADMIN' } },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
       params: { _id: '1' },
     } as unknown as Request;
     const res = mockRes();
@@ -248,7 +248,7 @@ describe('PoolParticipantController.update', () => {
   it('returns 404 when the participant does not exist', async () => {
     mockFindById.mockResolvedValue(null);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: 'missing' },
       body: { quantity: 5 },
     } as unknown as Request;
@@ -265,7 +265,7 @@ describe('PoolParticipantController.update', () => {
       pool_ref: 'pool-1',
     });
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
       body: { quantity: 5 },
     } as unknown as Request;
@@ -284,7 +284,7 @@ describe('PoolParticipantController.update', () => {
     });
     mockPoolFindById.mockResolvedValue(null);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
       body: { quantity: 5 },
     } as unknown as Request;
@@ -305,7 +305,7 @@ describe('PoolParticipantController.update', () => {
       .spyOn(BaseController.prototype, 'update')
       .mockResolvedValue(undefined);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
       body: { quantity: 5 },
     } as unknown as Request;
@@ -328,7 +328,7 @@ describe('PoolParticipantController.update', () => {
       .spyOn(BaseController.prototype, 'update')
       .mockResolvedValue(undefined);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
       body: { quantity: 5 },
     } as unknown as Request;
@@ -355,7 +355,7 @@ describe('PoolParticipantController.delete', () => {
   it('returns 404 when the participant does not exist', async () => {
     mockFindById.mockResolvedValue(null);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: 'missing' },
     } as unknown as Request;
     const res = mockRes();
@@ -371,7 +371,7 @@ describe('PoolParticipantController.delete', () => {
       pool_ref: 'pool-1',
     });
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
     } as unknown as Request;
     const res = mockRes();
@@ -389,7 +389,7 @@ describe('PoolParticipantController.delete', () => {
     });
     mockPoolFindById.mockResolvedValue(null);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
     } as unknown as Request;
     const res = mockRes();
@@ -409,7 +409,7 @@ describe('PoolParticipantController.delete', () => {
       .spyOn(BaseController.prototype, 'delete')
       .mockResolvedValue(undefined);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
     } as unknown as Request;
     const res = mockRes();
@@ -430,7 +430,7 @@ describe('PoolParticipantController.delete', () => {
       .spyOn(BaseController.prototype, 'delete')
       .mockResolvedValue(undefined);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
     } as unknown as Request;
     const res = mockRes();
@@ -451,7 +451,7 @@ describe('PoolParticipantController.delete', () => {
       .spyOn(BaseController.prototype, 'delete')
       .mockResolvedValue(undefined);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
     } as unknown as Request;
     const res = mockRes();
@@ -476,7 +476,7 @@ describe('PoolParticipantController.delete', () => {
       .spyOn(BaseController.prototype, 'delete')
       .mockResolvedValue(undefined);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
     } as unknown as Request;
     const res = mockRes();
@@ -501,7 +501,7 @@ describe('PoolParticipantController.delete', () => {
       .spyOn(BaseController.prototype, 'delete')
       .mockResolvedValue(undefined);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
     } as unknown as Request;
     const res = mockRes();

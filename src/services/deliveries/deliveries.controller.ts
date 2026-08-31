@@ -46,8 +46,7 @@ class DeliveryController extends BaseController {
 
       await super.create(req, res);
     } catch (error) {
-      this.logger.error(`Delivery Creation: ${error}`);
-      res.status(500).send({ message: 'Internal server error' });
+      this.errorHandler(error, req, res);
     }
   }
 
@@ -62,10 +61,9 @@ class DeliveryController extends BaseController {
         return;
       }
 
-      const filter =
-        user.role === 'ADMIN'
-          ? {}
-          : { pool_ref: { $in: await this.visiblePoolIds(user) } };
+      const filter = user.roles.includes('ADMIN')
+        ? {}
+        : { pool_ref: { $in: await this.visiblePoolIds(user) } };
 
       const docs = await this.model.find(filter);
       this.logger.info(`${this.model.modelName} Retrieved`);
@@ -75,10 +73,7 @@ class DeliveryController extends BaseController {
         total: docs.length,
       });
     } catch (error) {
-      this.logger.error(
-        `Retrieving ${this.model.modelName} documents: ${error}`
-      );
-      res.status(500).send({ message: 'Internal server error' });
+      this.errorHandler(error, req, res);
     }
   }
 
@@ -97,7 +92,7 @@ class DeliveryController extends BaseController {
         return;
       }
 
-      if (user.role !== 'ADMIN') {
+      if (!user.roles.includes('ADMIN')) {
         const visiblePoolIds = await this.visiblePoolIds(user);
         const isVisible = visiblePoolIds.some(
           (poolId) => poolId.toString() === doc.pool_ref.toString()
@@ -113,26 +108,30 @@ class DeliveryController extends BaseController {
         data: doc,
       });
     } catch (error) {
-      this.logger.error(`Retrieving specified document: ${error}`);
-      res.status(500).send({ message: 'Internal server error' });
+      this.errorHandler(error, req, res);
     }
   }
 
-  // Pool ids a non-admin caller is allowed to see a delivery for.
-  private async visiblePoolIds(user: { userId: string; role: UserRole }) {
-    if (user.role === 'SUPPLIER') {
-      const offerIds = await productOfferModel.distinct('_id', {
-        user_ref: user.userId,
-      });
-      return poolModel.distinct('_id', {
-        productoffer_ref: { $in: offerIds },
-      });
-    }
+  // Pool ids a non-admin caller is allowed to see a delivery for — the
+  // union of both roles when a caller holds both (SUPPLIER: pools built
+  // from their own offers; RETAILER: pools they've joined as a participant).
+  private async visiblePoolIds(user: { userId: string; roles: UserRole[] }) {
+    const poolIdLists = await Promise.all([
+      user.roles.includes('SUPPLIER')
+        ? productOfferModel
+            .distinct('_id', { user_ref: user.userId })
+            .then((offerIds) =>
+              poolModel.distinct('_id', {
+                productoffer_ref: { $in: offerIds },
+              })
+            )
+        : Promise.resolve([]),
+      user.roles.includes('RETAILER')
+        ? poolParticipantModel.distinct('pool_ref', { user_ref: user.userId })
+        : Promise.resolve([]),
+    ]);
 
-    // RETAILER: pools they've joined as a participant.
-    return poolParticipantModel.distinct('pool_ref', {
-      user_ref: user.userId,
-    });
+    return poolIdLists.flat();
   }
 }
 

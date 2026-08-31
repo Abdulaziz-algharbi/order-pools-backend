@@ -16,20 +16,29 @@ class PoolController extends BaseController {
     return productOfferModel.distinct('_id', { user_ref: userId });
   }
 
-  // Anonymous callers and RETAILER see only OPEN (actively collecting)
-  // pools. SUPPLIER sees only pools built from their own offers,
-  // regardless of status. ADMIN sees every pool.
+  // Anonymous callers and a caller with RETAILER see OPEN (actively
+  // collecting) pools; a caller with SUPPLIER also sees every pool built
+  // from their own offers, regardless of status — a dual-role account
+  // holding both gets the union of the two, matching access to both
+  // panels. ADMIN sees every pool outright.
   async list(req: Request, res: Response): Promise<void> {
     try {
       const user = req.meta?.user;
 
-      let filter: Record<string, unknown> = { status: 'OPEN' };
-      if (user?.role === 'ADMIN') {
+      let filter: Record<string, unknown>;
+      if (user?.roles.includes('ADMIN')) {
         filter = {};
-      } else if (user?.role === 'SUPPLIER') {
-        filter = {
-          productoffer_ref: { $in: await this.ownOfferIds(user.userId) },
-        };
+      } else {
+        const conditions: Record<string, unknown>[] = [];
+        if (!user || user.roles.includes('RETAILER')) {
+          conditions.push({ status: 'OPEN' });
+        }
+        if (user?.roles.includes('SUPPLIER')) {
+          conditions.push({
+            productoffer_ref: { $in: await this.ownOfferIds(user.userId) },
+          });
+        }
+        filter = conditions.length > 1 ? { $or: conditions } : conditions[0];
       }
 
       const docs = await this.model.find(filter);
@@ -40,10 +49,7 @@ class PoolController extends BaseController {
         total: docs.length,
       });
     } catch (error) {
-      this.logger.error(
-        `Retrieving ${this.model.modelName} documents: ${error}`
-      );
-      res.status(500).send({ message: 'Internal server error' });
+      this.errorHandler(error, req, res);
     }
   }
 
@@ -58,18 +64,21 @@ class PoolController extends BaseController {
         return;
       }
 
-      if (user?.role === 'SUPPLIER') {
-        const offerIds = await this.ownOfferIds(user.userId);
-        const owns = offerIds.some(
-          (id) => id.toString() === doc.productoffer_ref.toString()
-        );
-        if (!owns) {
+      if (!user?.roles.includes('ADMIN')) {
+        let visible =
+          doc.status === 'OPEN' && (!user || user.roles.includes('RETAILER'));
+
+        if (!visible && user?.roles.includes('SUPPLIER')) {
+          const offerIds = await this.ownOfferIds(user.userId);
+          visible = offerIds.some(
+            (id) => id.toString() === doc.productoffer_ref.toString()
+          );
+        }
+
+        if (!visible) {
           res.status(403).send({ message: ERRORS.UNAUTHORIZED });
           return;
         }
-      } else if (user?.role !== 'ADMIN' && doc.status !== 'OPEN') {
-        res.status(403).send({ message: ERRORS.UNAUTHORIZED });
-        return;
       }
 
       res.status(200).send({
@@ -77,8 +86,7 @@ class PoolController extends BaseController {
         data: doc,
       });
     } catch (error) {
-      this.logger.error(`Retrieving specified document: ${error}`);
-      res.status(500).send({ message: 'Internal server error' });
+      this.errorHandler(error, req, res);
     }
   }
 }

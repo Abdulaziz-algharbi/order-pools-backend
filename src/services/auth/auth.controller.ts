@@ -20,7 +20,7 @@ class AuthController extends BaseController {
       const savedUser = await user.save();
       const tokens = this.jwt.createTokens({
         _id: savedUser._id,
-        role: savedUser.role,
+        roles: savedUser.roles,
       });
       this.logger.info(`User registered: ${savedUser._id}`);
 
@@ -58,7 +58,10 @@ class AuthController extends BaseController {
 
       if (!this.hasher.compareSync(password, user.password))
         throw new Error(this.ERRORS.INVALID_CREDENTIALS);
-      const tokens = this.jwt.createTokens({ _id: user._id, role: user.role });
+      const tokens = this.jwt.createTokens({
+        _id: user._id,
+        roles: user.roles,
+      });
       await this.model.findOneAndUpdate(
         { userId: user._id },
         {
@@ -78,16 +81,27 @@ class AuthController extends BaseController {
   }
 
   async me(req: Request, res: Response) {
-    const userId = req.meta.user?.userId;
-    if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+    try {
+      const userId = req.meta.user?.userId;
+      if (!userId) {
+        res.status(401).json({ message: 'Access token is missing' });
+        return;
+      }
+      const userModel = this.registry.get(this.REGISTRY.USER_MODEL);
+      const user = await userModel.findById(userId).select('-password');
+      if (!user) {
+        // Not ERRORS.USER_NOT_FOUND — that message is specific to a failed
+        // email lookup on login. This is a valid token whose account no
+        // longer exists (e.g. deleted after the token was issued).
+        res.status(404).json({
+          message: 'The account associated with this session no longer exists',
+        });
+        return;
+      }
+      res.status(200).json({ user });
+    } catch (error) {
+      this.errorHandler(error, req, res);
     }
-    const userModel = this.registry.get(this.REGISTRY.USER_MODEL);
-    const user = await userModel.findById(userId).select('-password');
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    res.status(200).json({ user });
   }
 
   async refresh(req: Request, res: Response) {
@@ -112,19 +126,15 @@ class AuthController extends BaseController {
         return;
       }
 
-      const { _id, role } = decoded as jwt.JwtPayload;
+      const { _id, roles } = decoded as jwt.JwtPayload;
 
-      const accessToken = this.jwt.createAccessToken({ _id, role });
+      const accessToken = this.jwt.createAccessToken({ _id, roles });
 
       res.status(200).send({
         accessToken,
       });
     } catch (error) {
-      this.logger.error(`Token refresh failed: ${error}`);
-
-      res.status(500).send({
-        message: 'Internal server error',
-      });
+      this.errorHandler(error, req, res);
     }
   }
 

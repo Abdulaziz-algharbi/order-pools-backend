@@ -37,7 +37,9 @@ class ComplaintController extends BaseController {
         return;
       }
 
-      const filter = user.role === 'ADMIN' ? {} : { creator_ref: user.userId };
+      const filter = user.roles.includes('ADMIN')
+        ? {}
+        : { creator_ref: user.userId };
 
       const docs = await this.model.find(filter);
       this.logger.info(`${this.model.modelName} Retrieved`);
@@ -47,10 +49,7 @@ class ComplaintController extends BaseController {
         total: docs.length,
       });
     } catch (error) {
-      this.logger.error(
-        `Retrieving ${this.model.modelName} documents: ${error}`
-      );
-      res.status(500).send({ message: 'Internal server error' });
+      this.errorHandler(error, req, res);
     }
   }
 
@@ -69,7 +68,10 @@ class ComplaintController extends BaseController {
         return;
       }
 
-      if (user.role !== 'ADMIN' && doc.creator_ref.toString() !== user.userId) {
+      if (
+        !user.roles.includes('ADMIN') &&
+        doc.creator_ref.toString() !== user.userId
+      ) {
         res.status(403).send({ message: ERRORS.UNAUTHORIZED });
         return;
       }
@@ -79,8 +81,7 @@ class ComplaintController extends BaseController {
         data: doc,
       });
     } catch (error) {
-      this.logger.error(`Retrieving specified document: ${error}`);
-      res.status(500).send({ message: 'Internal server error' });
+      this.errorHandler(error, req, res);
     }
   }
 
@@ -105,7 +106,7 @@ class ComplaintController extends BaseController {
       }
 
       let allowedFields: string[];
-      if (user.role === 'ADMIN') {
+      if (user.roles.includes('ADMIN')) {
         allowedFields = this.allowedFields;
       } else if (doc.creator_ref.toString() === user.userId) {
         allowedFields = OWNER_UPDATABLE_FIELDS;
@@ -127,8 +128,7 @@ class ComplaintController extends BaseController {
         data: doc,
       });
     } catch (error) {
-      this.logger.error(`${this.model.modelName} Update: ${error}`);
-      res.status(500).send({ message: 'Internal server error' });
+      this.errorHandler(error, req, res);
     }
   }
 }

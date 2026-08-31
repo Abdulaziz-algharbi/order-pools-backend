@@ -49,7 +49,7 @@ describe('ProductOfferController.create', () => {
       .spyOn(BaseController.prototype, 'create')
       .mockResolvedValue(undefined);
     const req = {
-      meta: { user: { userId: 'supplier-1', role: 'SUPPLIER' } },
+      meta: { user: { userId: 'supplier-1', roles: ['SUPPLIER'] } },
       body: { user_ref: 'someone-else', name: 'Rice', wholeQuantity: 10 },
     } as unknown as Request;
     const res = mockRes();
@@ -76,7 +76,7 @@ describe('ProductOfferController.list', () => {
   it('queries with an empty filter (every offer) for ADMIN', async () => {
     mockFind.mockResolvedValue([{ _id: '1' }, { _id: '2' }]);
     const req = {
-      meta: { user: { userId: 'admin-1', role: 'ADMIN' } },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
     } as Request;
     const res = mockRes();
 
@@ -92,7 +92,7 @@ describe('ProductOfferController.list', () => {
   it('scopes the query to user_ref for a SUPPLIER (never sees other offers)', async () => {
     mockFind.mockResolvedValue([{ _id: '1' }]);
     const req = {
-      meta: { user: { userId: 'supplier-1', role: 'SUPPLIER' } },
+      meta: { user: { userId: 'supplier-1', roles: ['SUPPLIER'] } },
     } as Request;
     const res = mockRes();
 
@@ -117,7 +117,7 @@ describe('ProductOfferController.getById', () => {
   it('returns 404 when the offer does not exist', async () => {
     mockFindById.mockResolvedValue(null);
     const req = {
-      meta: { user: { userId: 'supplier-1', role: 'SUPPLIER' } },
+      meta: { user: { userId: 'supplier-1', roles: ['SUPPLIER'] } },
       params: { _id: 'missing' },
     } as unknown as Request;
     const res = mockRes();
@@ -132,7 +132,7 @@ describe('ProductOfferController.getById', () => {
       user_ref: { toString: () => 'someone-else' },
     });
     const req = {
-      meta: { user: { userId: 'supplier-1', role: 'SUPPLIER' } },
+      meta: { user: { userId: 'supplier-1', roles: ['SUPPLIER'] } },
       params: { _id: '1' },
     } as unknown as Request;
     const res = mockRes();
@@ -147,7 +147,7 @@ describe('ProductOfferController.getById', () => {
       user_ref: { toString: () => 'supplier-1' },
     });
     const req = {
-      meta: { user: { userId: 'supplier-1', role: 'SUPPLIER' } },
+      meta: { user: { userId: 'supplier-1', roles: ['SUPPLIER'] } },
       params: { _id: '1' },
     } as unknown as Request;
     const res = mockRes();
@@ -162,7 +162,7 @@ describe('ProductOfferController.getById', () => {
       user_ref: { toString: () => 'someone-else' },
     });
     const req = {
-      meta: { user: { userId: 'admin-1', role: 'ADMIN' } },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
       params: { _id: '1' },
     } as unknown as Request;
     const res = mockRes();
@@ -187,7 +187,7 @@ describe('ProductOfferController.update', () => {
   it('returns 404 when the offer does not exist', async () => {
     mockFindById.mockResolvedValue(null);
     const req = {
-      meta: { user: { userId: 'supplier-1', role: 'SUPPLIER' } },
+      meta: { user: { userId: 'supplier-1', roles: ['SUPPLIER'] } },
       params: { _id: 'missing' },
       body: { price: 5 },
     } as unknown as Request;
@@ -205,7 +205,7 @@ describe('ProductOfferController.update', () => {
     };
     mockFindById.mockResolvedValue(doc);
     const req = {
-      meta: { user: { userId: 'supplier-1', role: 'SUPPLIER' } },
+      meta: { user: { userId: 'supplier-1', roles: ['SUPPLIER'] } },
       params: { _id: '1' },
       body: { price: 5 },
     } as unknown as Request;
@@ -226,7 +226,7 @@ describe('ProductOfferController.update', () => {
     };
     mockFindById.mockResolvedValue(doc);
     const req = {
-      meta: { user: { userId: 'supplier-1', role: 'SUPPLIER' } },
+      meta: { user: { userId: 'supplier-1', roles: ['SUPPLIER'] } },
       params: { _id: '1' },
       body: { wholeQuantity: 50, price: 7 },
     } as unknown as Request;
@@ -252,7 +252,7 @@ describe('ProductOfferController.update', () => {
     };
     mockFindById.mockResolvedValue(doc);
     const req = {
-      meta: { user: { userId: 'supplier-1', role: 'SUPPLIER' } },
+      meta: { user: { userId: 'supplier-1', roles: ['SUPPLIER'] } },
       params: { _id: '1' },
       body: {
         name: 'new name',
@@ -284,7 +284,7 @@ describe('ProductOfferController.update', () => {
     };
     mockFindById.mockResolvedValue(doc);
     const req = {
-      meta: { user: { userId: 'supplier-1', role: 'SUPPLIER' } },
+      meta: { user: { userId: 'supplier-1', roles: ['SUPPLIER'] } },
       params: { _id: '1' },
       body: { status: 'APPROVED', adminComment: 'self-approved' },
     } as unknown as Request;
@@ -308,7 +308,7 @@ describe('ProductOfferController.update', () => {
     };
     mockFindById.mockResolvedValue(doc);
     const req = {
-      meta: { user: { userId: 'admin-1', role: 'ADMIN' } },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
       params: { _id: '1' },
       body: { status: 'APPROVED', adminComment: 'looks good' },
     } as unknown as Request;
@@ -331,7 +331,7 @@ describe('ProductOfferController.update', () => {
     };
     mockFindById.mockResolvedValue(doc);
     const req = {
-      meta: { user: { userId: 'admin-1', role: 'ADMIN' } },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
       params: { _id: '1' },
       body: { wholeQuantity: 999, price: 1 },
     } as unknown as Request;
@@ -354,7 +354,7 @@ describe('ProductOfferController.update', () => {
     };
     mockFindById.mockResolvedValue(doc);
     const req = {
-      meta: { user: { userId: 'admin-1', role: 'ADMIN' } },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
       params: { _id: '1' },
       body: { status: 'REJECTED', adminComment: 'too expensive' },
     } as unknown as Request;
@@ -375,7 +375,7 @@ describe('ProductOfferController.update', () => {
     };
     mockFindById.mockResolvedValue(doc);
     const req = {
-      meta: { user: { userId: 'admin-1', role: 'ADMIN' } },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
       params: { _id: '1' },
       body: { status: 'NEGOTIATION' },
     } as unknown as Request;
@@ -402,7 +402,7 @@ describe('ProductOfferController.delete', () => {
   it('returns 404 when the offer does not exist', async () => {
     mockFindById.mockResolvedValue(null);
     const req = {
-      meta: { user: { userId: 'supplier-1', role: 'SUPPLIER' } },
+      meta: { user: { userId: 'supplier-1', roles: ['SUPPLIER'] } },
       params: { _id: 'missing' },
     } as unknown as Request;
     const res = mockRes();
@@ -420,7 +420,7 @@ describe('ProductOfferController.delete', () => {
       .spyOn(BaseController.prototype, 'delete')
       .mockResolvedValue(undefined);
     const req = {
-      meta: { user: { userId: 'supplier-1', role: 'SUPPLIER' } },
+      meta: { user: { userId: 'supplier-1', roles: ['SUPPLIER'] } },
       params: { _id: '1' },
     } as unknown as Request;
     const res = mockRes();
@@ -440,7 +440,7 @@ describe('ProductOfferController.delete', () => {
       .spyOn(BaseController.prototype, 'delete')
       .mockResolvedValue(undefined);
     const req = {
-      meta: { user: { userId: 'supplier-1', role: 'SUPPLIER' } },
+      meta: { user: { userId: 'supplier-1', roles: ['SUPPLIER'] } },
       params: { _id: '1' },
     } as unknown as Request;
     const res = mockRes();
@@ -459,7 +459,7 @@ describe('ProductOfferController.delete', () => {
       .spyOn(BaseController.prototype, 'delete')
       .mockResolvedValue(undefined);
     const req = {
-      meta: { user: { userId: 'admin-1', role: 'ADMIN' } },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
       params: { _id: '1' },
     } as unknown as Request;
     const res = mockRes();

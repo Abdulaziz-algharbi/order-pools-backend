@@ -21,7 +21,7 @@ const tokenMiddleware = (req: Request, res: Response, next: NextFunction) => {
     req.meta = {
       user: {
         userId: decoded._id,
-        role: decoded.role,
+        roles: decoded.roles,
       },
     };
     next();

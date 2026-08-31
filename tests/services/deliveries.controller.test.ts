@@ -136,7 +136,7 @@ describe('DeliveryController.list', () => {
   it('queries with an empty filter for ADMIN', async () => {
     mockFind.mockResolvedValue([{ _id: '1' }]);
     const req = {
-      meta: { user: { userId: 'admin-1', role: 'ADMIN' } },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
     } as Request;
     const res = mockRes();
 
@@ -150,7 +150,7 @@ describe('DeliveryController.list', () => {
     mockParticipantDistinct.mockResolvedValue(['pool-1', 'pool-2']);
     mockFind.mockResolvedValue([]);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
     } as Request;
     const res = mockRes();
 
@@ -169,7 +169,7 @@ describe('DeliveryController.list', () => {
     mockPoolDistinct.mockResolvedValue(['pool-9']);
     mockFind.mockResolvedValue([]);
     const req = {
-      meta: { user: { userId: 'supplier-1', role: 'SUPPLIER' } },
+      meta: { user: { userId: 'supplier-1', roles: ['SUPPLIER'] } },
     } as Request;
     const res = mockRes();
 
@@ -199,7 +199,7 @@ describe('DeliveryController.getById', () => {
   it('returns 404 when the delivery does not exist', async () => {
     mockFindById.mockResolvedValue(null);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: 'missing' },
     } as unknown as Request;
     const res = mockRes();
@@ -213,7 +213,7 @@ describe('DeliveryController.getById', () => {
     mockFindById.mockResolvedValue({ pool_ref: 'pool-1' });
     mockParticipantDistinct.mockResolvedValue(['pool-2']);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
     } as unknown as Request;
     const res = mockRes();
@@ -227,7 +227,7 @@ describe('DeliveryController.getById', () => {
     mockFindById.mockResolvedValue({ pool_ref: 'pool-1' });
     mockParticipantDistinct.mockResolvedValue(['pool-1']);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
     } as unknown as Request;
     const res = mockRes();
@@ -240,7 +240,7 @@ describe('DeliveryController.getById', () => {
   it('lets ADMIN fetch any delivery', async () => {
     mockFindById.mockResolvedValue({ pool_ref: 'pool-1' });
     const req = {
-      meta: { user: { userId: 'admin-1', role: 'ADMIN' } },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
       params: { _id: '1' },
     } as unknown as Request;
     const res = mockRes();

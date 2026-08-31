@@ -44,7 +44,7 @@ describe('PoolController.list', () => {
   it('shows only OPEN pools to a RETAILER', async () => {
     mockFind.mockResolvedValue([]);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
     } as Request;
     const res = mockRes();
 
@@ -58,7 +58,7 @@ describe('PoolController.list', () => {
     mockOfferDistinct.mockResolvedValue(['offer-1']);
     mockFind.mockResolvedValue([]);
     const req = {
-      meta: { user: { userId: 'supplier-1', role: 'SUPPLIER' } },
+      meta: { user: { userId: 'supplier-1', roles: ['SUPPLIER'] } },
     } as Request;
     const res = mockRes();
 
@@ -75,7 +75,7 @@ describe('PoolController.list', () => {
   it('returns every pool for ADMIN, with no filter at all', async () => {
     mockFind.mockResolvedValue([{ _id: '1' }, { _id: '2' }]);
     const req = {
-      meta: { user: { userId: 'admin-1', role: 'ADMIN' } },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
     } as Request;
     const res = mockRes();
 
@@ -128,7 +128,7 @@ describe('PoolController.getById', () => {
   it('blocks a RETAILER from a non-OPEN pool', async () => {
     mockFindById.mockResolvedValue({ status: 'CANCELLED' });
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
     } as unknown as Request;
     const res = mockRes();
@@ -141,7 +141,7 @@ describe('PoolController.getById', () => {
   it('lets a RETAILER view an OPEN pool', async () => {
     mockFindById.mockResolvedValue({ status: 'OPEN' });
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
     } as unknown as Request;
     const res = mockRes();
@@ -158,7 +158,7 @@ describe('PoolController.getById', () => {
     });
     mockOfferDistinct.mockResolvedValue(['offer-1']);
     const req = {
-      meta: { user: { userId: 'supplier-1', role: 'SUPPLIER' } },
+      meta: { user: { userId: 'supplier-1', roles: ['SUPPLIER'] } },
       params: { _id: '1' },
     } as unknown as Request;
     const res = mockRes();
@@ -175,7 +175,7 @@ describe('PoolController.getById', () => {
     });
     mockOfferDistinct.mockResolvedValue(['offer-1']);
     const req = {
-      meta: { user: { userId: 'supplier-1', role: 'SUPPLIER' } },
+      meta: { user: { userId: 'supplier-1', roles: ['SUPPLIER'] } },
       params: { _id: '1' },
     } as unknown as Request;
     const res = mockRes();
@@ -188,7 +188,7 @@ describe('PoolController.getById', () => {
   it('lets ADMIN view any pool regardless of status', async () => {
     mockFindById.mockResolvedValue({ status: 'CANCELLED' });
     const req = {
-      meta: { user: { userId: 'admin-1', role: 'ADMIN' } },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
       params: { _id: '1' },
     } as unknown as Request;
     const res = mockRes();

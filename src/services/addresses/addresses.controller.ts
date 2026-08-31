@@ -1,5 +1,4 @@
 import { Request, Response } from 'express';
-import mongoose from 'mongoose';
 
 import BaseController from '../base/base.controller';
 import ERRORS from '../../constants/ERRORS';
@@ -31,7 +30,7 @@ class AddressController extends BaseController {
       const caller = req.meta?.user;
       let targetUserId: string | undefined;
 
-      if (caller?.role === 'ADMIN') {
+      if (caller?.roles.includes('ADMIN')) {
         const requestedUserId = req.body.user_ref as string | undefined;
         if (!requestedUserId) {
           res.status(400).send({
@@ -64,27 +63,7 @@ class AddressController extends BaseController {
       this.logger.info(`${this.model.modelName} created`);
       res.status(201).send(savedDoc);
     } catch (error) {
-      if (error instanceof mongoose.Error.ValidationError) {
-        this.logger.warn(`${this.model.modelName} Creation: Validation Error`);
-        res
-          .status(400)
-          .send({ message: 'Validation Error', errors: error.errors });
-        return;
-      }
-
-      if (
-        error instanceof mongoose.mongo.MongoServerError &&
-        error.code === 11000
-      ) {
-        this.logger.warn(
-          `${this.model.modelName} Duplicate Key: ${error.message}`
-        );
-        res.status(409).send({ message: error.message });
-        return;
-      }
-
-      this.logger.error(`${this.model.modelName} Creation: ${error}`);
-      res.status(500).send({ message: 'Internal server error' });
+      this.errorHandler(error, req, res);
     }
   }
 
@@ -97,12 +76,11 @@ class AddressController extends BaseController {
         return;
       }
 
-      const docs =
-        user.role === 'ADMIN'
-          ? await this.model.find()
-          : await this.model.find({
-              _id: { $in: await this.ownedAddressIds(user.userId) },
-            });
+      const docs = user.roles.includes('ADMIN')
+        ? await this.model.find()
+        : await this.model.find({
+            _id: { $in: await this.ownedAddressIds(user.userId) },
+          });
 
       this.logger.info(`${this.model.modelName} Retrieved`);
       res.status(200).send({
@@ -111,10 +89,7 @@ class AddressController extends BaseController {
         total: docs.length,
       });
     } catch (error) {
-      this.logger.error(
-        `Retrieving ${this.model.modelName} documents: ${error}`
-      );
-      res.status(500).send({ message: 'Internal server error' });
+      this.errorHandler(error, req, res);
     }
   }
 
@@ -133,7 +108,7 @@ class AddressController extends BaseController {
         return;
       }
 
-      if (user.role !== 'ADMIN') {
+      if (!user.roles.includes('ADMIN')) {
         const ownedIds = await this.ownedAddressIds(user.userId);
         if (!ownedIds.includes(doc._id.toString())) {
           res.status(403).send({ message: ERRORS.UNAUTHORIZED });
@@ -146,8 +121,7 @@ class AddressController extends BaseController {
         data: doc,
       });
     } catch (error) {
-      this.logger.error(`Retrieving specified document: ${error}`);
-      res.status(500).send({ message: 'Internal server error' });
+      this.errorHandler(error, req, res);
     }
   }
 
@@ -167,7 +141,7 @@ class AddressController extends BaseController {
         return;
       }
 
-      if (user.role !== 'ADMIN') {
+      if (!user.roles.includes('ADMIN')) {
         const ownedIds = await this.ownedAddressIds(user.userId);
         if (!ownedIds.includes(doc._id.toString())) {
           res.status(403).send({ message: ERRORS.UNAUTHORIZED });
@@ -177,8 +151,7 @@ class AddressController extends BaseController {
 
       await super.update(req, res);
     } catch (error) {
-      this.logger.error(`${this.model.modelName} Update: ${error}`);
-      res.status(500).send({ message: 'Internal server error' });
+      this.errorHandler(error, req, res);
     }
   }
 
@@ -200,7 +173,7 @@ class AddressController extends BaseController {
         return;
       }
 
-      if (user.role !== 'ADMIN') {
+      if (!user.roles.includes('ADMIN')) {
         const ownedIds = await this.ownedAddressIds(user.userId);
         if (!ownedIds.includes(doc._id.toString())) {
           res.status(403).send({ message: ERRORS.UNAUTHORIZED });
@@ -215,8 +188,7 @@ class AddressController extends BaseController {
 
       await super.delete(req, res);
     } catch (error) {
-      this.logger.error(`${this.model.modelName} Delete: ${error}`);
-      res.status(500).send({ message: 'Internal server error' });
+      this.errorHandler(error, req, res);
     }
   }
 }

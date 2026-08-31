@@ -1,37 +1,42 @@
 @baseUrl=http://localhost:8000/api/v1/users
 @userId=6a7c2b41f389f6ed96dc98e8
 @addressIds=["6a731fd174b4f84b4767e2a8", "6a7c2ad3f389f6ed96dc98e5"]
+@adminToken=REPLACE_WITH_ADMIN_ACCESS_TOKEN
 
-### create user
+# This module is ADMIN only end to end. Retailers/suppliers register, log
+# in, refresh, and read their own info via /auth instead — see auth.http.
+
+### create user (ADMIN only; roles defaults to ["RETAILER"] if omitted)
 POST {{baseUrl}}
 Content-Type: application/json
-
-# we need to revisit and handle the payment registration (stripe) we will see
+Authorization: Bearer {{adminToken}}
 
 {
+  "roles": ["SUPPLIER"],
   "firstName": "supplier",
   "lastName": "test",
   "email": "supplierTest2@two.com",
-  // "stripeCustomerId": "",
-  // "stripePaymentMethodId": "",
   "phoneNumber": "91149027",
   "companyName": "supplier company",
   "password": "suppliertest",
   "addresses": {{addressIds}}
 }
 
-### get all users
+### get all users (ADMIN only)
 
 GET {{baseUrl}}
+Authorization: Bearer {{adminToken}}
 
-### get user by id
+### get user by id (ADMIN only)
 
 GET {{baseUrl}}/{{userId}}
+Authorization: Bearer {{adminToken}}
 
-### update user
+### update user (ADMIN only; roles may be set directly here too)
 
 PATCH {{baseUrl}}/{{userId}}
 Content-Type: application/json
+Authorization: Bearer {{adminToken}}
 
 {
   "firstName": "Updated",
@@ -39,32 +44,6 @@ Content-Type: application/json
   "companyName": "Updated Company"
 }
 
-### delete user
+### delete user (ADMIN only)
 DELETE {{baseUrl}}/{{userId}}
-
-
-
-#   firstName: { type: String, required: true },
-#   lastName: { type: String, required: true },
-#   email: { type: String, required: true, unique: true },
-#   stripeCustomerId: string,
-#   stripePaymentMethodId: string,
-#   phoneNumber: { type: String, required: true },
-#   companyName: { type: String, required: true },
-#   password: { type: String, required: true }, // hashed sha256
-#   addresses: {
-#       type: [
-#         {
-#           type: Schema.Types.ObjectId,
-#           ref: 'Address',
-#           required: true,
-#         },
-#       ],
-#       validate: {
-#         validator: function (addresses) {
-#           return addresses.length > 0;
-#         },
-#         message: 'At least one address is required.',
-#       },
-#       default: [],
-#     }
+Authorization: Bearer {{adminToken}}

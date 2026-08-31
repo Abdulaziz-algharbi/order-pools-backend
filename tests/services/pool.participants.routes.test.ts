@@ -48,7 +48,7 @@ function mockRes() {
 
 function supplierReq(): Request {
   return {
-    meta: { user: { userId: 'supplier-1', role: 'SUPPLIER' } },
+    meta: { user: { userId: 'supplier-1', roles: ['SUPPLIER'] } },
   } as unknown as Request;
 }
 

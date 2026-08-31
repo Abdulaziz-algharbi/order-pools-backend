@@ -57,6 +57,16 @@ class BaseController {
         return;
       }
 
+      // A malformed id (e.g. an :_id route param that isn't a valid
+      // ObjectId) throws this before any not-found check ever runs — worth
+      // its own 400 rather than falling through to a generic 500.
+      if (err instanceof mongoose.Error.CastError) {
+        res.status(400).send({
+          message: `Invalid ${err.path}: '${err.value}' is not a valid id`,
+        });
+        return;
+      }
+
       if (
         err instanceof mongoose.mongo.MongoServerError &&
         err.code === 11000
@@ -85,7 +95,7 @@ class BaseController {
           res.status(401).send({ message: ERRORS.TOKEN_EXPIRED });
           break;
         default:
-          res.status(500).send({ message: 'Internal server error' });
+          res.status(500).send({ message: ERRORS.INTERNAL_SERVER_ERROR });
       }
     };
 
@@ -101,34 +111,7 @@ class BaseController {
       this.logger.info(`${this.model.modelName} created`);
       res.status(201).send(savedDoc);
     } catch (error) {
-      if (error instanceof mongoose.Error.ValidationError) {
-        this.logger.warn(`{this.model.modelName} Creation: Validation Error`);
-        res.status(400).send({
-          message: 'Validation Error',
-          errors: error.errors,
-        });
-        return;
-      }
-
-      // MongoDB duplicate key error
-      if (
-        error instanceof mongoose.mongo.MongoServerError &&
-        error.code === 11000
-      ) {
-        this.logger.warn(
-          `${this.model.modelName} Duplicate Key: ${error.message}`
-        );
-
-        res.status(409).send({
-          message: error.message,
-        });
-
-        return;
-      }
-
-      // Unexpected error
-      this.logger.error(`${this.model.modelName} Creation: ${error}`);
-      res.status(500).send({ message: 'Internal server error' });
+      this.errorHandler(error, req, res);
     }
   }
 
@@ -144,10 +127,7 @@ class BaseController {
         total: docs.length,
       });
     } catch (error) {
-      this.logger.error(
-        `Retrieving ${this.model.modelName} documents: ${error}`
-      );
-      res.status(500).send({ message: 'Internal server error' });
+      this.errorHandler(error, req, res);
     }
   }
 
@@ -174,8 +154,7 @@ class BaseController {
         data: doc,
       });
     } catch (error) {
-      this.logger.error('Retrieving specified document:', error);
-      res.status(500).send({ message: 'Internal server error' });
+      this.errorHandler(error, req, res);
     }
   }
 
@@ -205,11 +184,7 @@ class BaseController {
         data: doc,
       });
     } catch (error) {
-      this.logger.error(`${this.model.modelName} Update: ${error}`);
-      res.status(500).json({
-        message: 'Internal server error',
-        error,
-      });
+      this.errorHandler(error, req, res);
     }
   }
 
@@ -231,12 +206,7 @@ class BaseController {
         message: 'Document deleted successfully',
       });
     } catch (error) {
-      this.logger.error(`${this.model.modelName} Delete: ${error}`);
-
-      res.status(500).json({
-        message: 'Internal server error',
-        error,
-      });
+      this.errorHandler(error, req, res);
     }
   }
 }

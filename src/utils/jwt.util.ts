@@ -6,7 +6,7 @@ import type { UserRole } from '../services/users/user.model';
 declare module 'jsonwebtoken' {
   export interface JwtPayload {
     _id: string;
-    role: UserRole;
+    roles: UserRole[];
   }
 }
 

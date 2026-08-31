@@ -14,7 +14,10 @@ export interface IUser extends Document {
   phoneNumber: string;
   password: string; // hashed sha256
   companyName: string;
-  role?: UserRole;
+  // A user can hold more than one role at once — e.g. an approved supplier
+  // request adds SUPPLIER onto an existing RETAILER, giving that account
+  // access to both panels rather than replacing one role with the other.
+  roles: UserRole[];
   commercialRegistration?: string | null;
   vatNumber?: string | null;
   addresses: Types.ObjectId[]; // id addresses and some most retrieval fields
@@ -34,10 +37,15 @@ const userSchema = new Schema<IUser>(
     phoneNumber: { type: String, required: true },
     companyName: { type: String, required: true },
     password: { type: String, required: true }, // hashed sha256
-    role: {
-      type: String,
-      enum: ['ADMIN', 'SUPPLIER', 'RETAILER'],
-      default: 'RETAILER',
+    roles: {
+      type: [{ type: String, enum: ['ADMIN', 'SUPPLIER', 'RETAILER'] }],
+      default: ['RETAILER'],
+      validate: {
+        validator: function (roles: UserRole[]) {
+          return roles.length > 0;
+        },
+        message: 'At least one role is required.',
+      },
     },
     commercialRegistration: { type: String, default: null },
     vatNumber: { type: String, default: null },
@@ -72,6 +80,11 @@ const userSchema = new Schema<IUser>(
   }
 );
 
+// PATCH /users/:_id is ADMIN only (see users.routes.ts) — `roles` is
+// included here since this module is the admin's general-purpose user
+// management tool. Approving a supplier request (see
+// supplier.requests.controller.ts) is the normal way SUPPLIER gets added
+// onto an account, but an admin may also correct `roles` directly here.
 export const couldBeUpdated = [
   'firstName',
   'lastName',
@@ -81,6 +94,7 @@ export const couldBeUpdated = [
   'commercialRegistration',
   'vatNumber',
   'profileImage',
+  'roles',
 ];
 
 userSchema.pre('save', async function () {

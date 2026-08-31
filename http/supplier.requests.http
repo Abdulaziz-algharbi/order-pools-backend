@@ -1,0 +1,74 @@
+@baseUrl=http://localhost:8000/api/v1/supplier-requests
+@requestId=6a86e87537758866e94b8ab8
+@retailerToken=REPLACE_WITH_RETAILER_ACCESS_TOKEN
+@adminToken=REPLACE_WITH_ADMIN_ACCESS_TOKEN
+
+
+### submit a supplier request (RETAILER only, not already a SUPPLIER)
+
+POST {{baseUrl}}
+Content-Type: application/json
+Authorization: Bearer {{retailerToken}}
+
+{
+  "description": "We are a wholesale rice distributor looking to sell through OrderPools."
+}
+
+### list my own requests (RETAILER)
+
+GET {{baseUrl}}
+Authorization: Bearer {{retailerToken}}
+
+### list every request (ADMIN)
+
+GET {{baseUrl}}
+Authorization: Bearer {{adminToken}}
+
+### get a specific request (owning RETAILER, or ADMIN for any)
+
+GET {{baseUrl}}/{{requestId}}
+Authorization: Bearer {{retailerToken}}
+
+### edit my own request's description while it's still PENDING (RETAILER)
+
+PATCH {{baseUrl}}/{{requestId}}
+Content-Type: application/json
+Authorization: Bearer {{retailerToken}}
+
+{
+  "description": "Updated: we distribute wholesale rice and cooking oil."
+}
+
+### approve a request (ADMIN only — adds SUPPLIER onto the requester's
+### roles, e.g. [RETAILER] -> [RETAILER, SUPPLIER], giving access to both
+### the retailer and supplier panels)
+
+PATCH {{baseUrl}}/{{requestId}}
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "status": "APPROVED",
+  "adminComment": "Verified commercial registration"
+}
+
+### reject a request (ADMIN only)
+
+PATCH {{baseUrl}}/{{requestId}}
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "status": "REJECTED",
+  "adminComment": "Missing business documentation"
+}
+
+### withdraw my own request (RETAILER)
+
+DELETE {{baseUrl}}/{{requestId}}
+Authorization: Bearer {{retailerToken}}
+
+### delete any request (ADMIN)
+
+DELETE {{baseUrl}}/{{requestId}}
+Authorization: Bearer {{adminToken}}

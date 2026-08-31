@@ -1,44 +1,65 @@
 import { Request, Response } from 'express';
 import BaseController from '../base/base.controller';
-import ProductOffer, { couldBeUpdated } from './product.offer.model';
 import ERRORS from '../../constants/ERRORS';
+import userModel from '../users/user.model';
+import supplierRequestModel, { couldBeUpdated } from './supplier.request.model';
 
-// A SUPPLIER (the offer's owner) may touch the product details and
-// commercial terms; ADMIN may only touch the review fields — never the
-// other way around.
-const OWNER_UPDATABLE_FIELDS = [
-  'name',
-  'description',
-  'brand',
-  'unit',
-  'images',
-  'wholeQuantity',
-  'price',
-];
-const ADMIN_UPDATABLE_FIELDS = ['status', 'adminComment'];
+// The owning RETAILER may only edit the description, and only while the
+// request is still PENDING; ADMIN may only set the review fields.
+const OWNER_UPDATABLE_FIELDS = ['description'];
+const ADMIN_UPDATABLE_FIELDS = couldBeUpdated;
 
-class ProductOfferController extends BaseController {
+class SupplierRequestController extends BaseController {
   constructor() {
-    super(ProductOffer, couldBeUpdated);
-    this.logger.info('ProductOfferController initialized');
+    super(supplierRequestModel, couldBeUpdated);
+    this.logger.info('SupplierRequestController initialized');
   }
 
-  // Only a SUPPLIER creates an offer (enforced by requireRole on the
-  // route), always under their own authenticated user id — never whatever
-  // the client sends.
+  // Only a RETAILER who isn't already a SUPPLIER may file a request
+  // (enforced by requireRole('RETAILER') on the route, plus the
+  // already-a-supplier check here), always under their own authenticated
+  // user id — never whatever the client sends.
   async create(req: Request, res: Response): Promise<void> {
-    const user = req.meta.user;
-    if (!user) {
-      res.status(401).send({ message: 'Access token is missing' });
-      return;
+    try {
+      const user = req.meta.user;
+      if (!user) {
+        res.status(401).send({ message: 'Access token is missing' });
+        return;
+      }
+
+      if (user.roles.includes('SUPPLIER')) {
+        res.status(409).send({
+          message: 'This account is already a SUPPLIER',
+        });
+        return;
+      }
+
+      const existing = await this.model.findOne({
+        user_ref: user.userId,
+        status: 'PENDING',
+      });
+      if (existing) {
+        res.status(409).send({ message: ERRORS.CONFLICT });
+        return;
+      }
+
+      const doc = new this.model({
+        user_ref: user.userId,
+        description: req.body.description,
+      });
+      const saved = await doc.save();
+
+      this.logger.info(`${this.model.modelName} created`);
+      res.status(201).send({
+        message: 'Document created successfully',
+        data: saved,
+      });
+    } catch (error) {
+      this.errorHandler(error, req, res);
     }
-
-    req.body.user_ref = user.userId;
-
-    await super.create(req, res);
   }
 
-  // ADMIN sees every offer; a SUPPLIER only sees their own.
+  // ADMIN sees every request; a RETAILER only sees their own.
   async list(req: Request, res: Response): Promise<void> {
     try {
       const user = req.meta.user;
@@ -63,7 +84,7 @@ class ProductOfferController extends BaseController {
     }
   }
 
-  // ADMIN may fetch any offer; a SUPPLIER only one of their own.
+  // ADMIN may fetch any request; a RETAILER only one of their own.
   async getById(req: Request, res: Response): Promise<void> {
     try {
       const user = req.meta.user;
@@ -95,12 +116,15 @@ class ProductOfferController extends BaseController {
     }
   }
 
-  // The owning SUPPLIER may patch the product details (name/description/
-  // brand/unit/images) and commercial terms (wholeQuantity/price). ADMIN
-  // may only patch status/adminComment, on any offer whether or not they
-  // own it. Written directly (rather than delegating to BaseController.update,
-  // which only knows one static allowed-fields list) since the allowed set
-  // here depends on which caller is making the request.
+  // The owning RETAILER may only edit description, and only while the
+  // request is still PENDING (once reviewed, the outcome is final). ADMIN
+  // may patch status/adminComment on any request, whether or not they own
+  // it — approving is the only place the underlying role change happens:
+  // it adds SUPPLIER onto the requester's existing roles (never replacing
+  // RETAILER), giving that account both panels. Written directly (rather
+  // than delegating to BaseController.update, which only knows one static
+  // allowed-fields list) since the allowed set depends on which caller is
+  // making the request.
   async update(req: Request, res: Response): Promise<void> {
     try {
       const user = req.meta.user;
@@ -115,13 +139,29 @@ class ProductOfferController extends BaseController {
         return;
       }
 
+      const isOwner = doc.user_ref.toString() === user.userId;
+      const isAdmin = user.roles.includes('ADMIN');
+
       let allowedFields: string[];
-      if (user.roles.includes('ADMIN')) {
+      if (isAdmin) {
         allowedFields = ADMIN_UPDATABLE_FIELDS;
-      } else if (doc.user_ref.toString() === user.userId) {
+      } else if (isOwner) {
+        if (doc.status !== 'PENDING') {
+          res.status(409).send({
+            message: 'Only a PENDING request can be edited',
+          });
+          return;
+        }
         allowedFields = OWNER_UPDATABLE_FIELDS;
       } else {
         res.status(403).send({ message: ERRORS.UNAUTHORIZED });
+        return;
+      }
+
+      if (isAdmin && doc.status !== 'PENDING' && 'status' in req.body) {
+        res.status(409).send({
+          message: 'Only a PENDING request can be reviewed',
+        });
         return;
       }
 
@@ -131,10 +171,10 @@ class ProductOfferController extends BaseController {
         }
       }
 
-      // Keep rejectedAt (the TTL clock, see product.offer.model.ts) in
-      // sync whenever ADMIN moves status in or out of REJECTED.
-      if (allowedFields === ADMIN_UPDATABLE_FIELDS && 'status' in req.body) {
-        doc.rejectedAt = doc.status === 'REJECTED' ? new Date() : null;
+      if (isAdmin && doc.status === 'APPROVED') {
+        await userModel.findByIdAndUpdate(doc.user_ref, {
+          $addToSet: { roles: 'SUPPLIER' },
+        });
       }
 
       await doc.save();
@@ -149,9 +189,7 @@ class ProductOfferController extends BaseController {
     }
   }
 
-  // ADMIN may delete any offer; a SUPPLIER may delete only their own.
-  // (A REJECTED offer also auto-deletes 7 days after rejection via the TTL
-  // index on rejectedAt — see product.offer.model.ts.)
+  // The owning RETAILER may delete their own request; ADMIN may delete any.
   async delete(req: Request, res: Response): Promise<void> {
     try {
       const user = req.meta.user;
@@ -181,6 +219,6 @@ class ProductOfferController extends BaseController {
   }
 }
 
-const productOffersController = new ProductOfferController();
+const supplierRequestController = new SupplierRequestController();
 
-export default productOffersController;
+export default supplierRequestController;

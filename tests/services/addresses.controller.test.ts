@@ -80,7 +80,7 @@ describe('AddressController.create', () => {
       city: 'c',
     });
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       body: {
         location: 'l',
         region: 'r',
@@ -101,7 +101,7 @@ describe('AddressController.create', () => {
   it('links the new address onto the caller for an authenticated SUPPLIER', async () => {
     mockSave.mockResolvedValue({ _id: 'addr-2' });
     const req = {
-      meta: { user: { userId: 'supplier-1', role: 'SUPPLIER' } },
+      meta: { user: { userId: 'supplier-1', roles: ['SUPPLIER'] } },
       body: { location: 'l', region: 'r', city: 'c' },
     } as unknown as Request;
     const res = mockRes();
@@ -116,7 +116,7 @@ describe('AddressController.create', () => {
 
   it('returns 400 when an ADMIN creates an address without a user_ref', async () => {
     const req = {
-      meta: { user: { userId: 'admin-1', role: 'ADMIN' } },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
       body: { location: 'l', region: 'r', city: 'c' },
     } as unknown as Request;
     const res = mockRes();
@@ -130,7 +130,7 @@ describe('AddressController.create', () => {
   it('returns 404 when an ADMIN targets a user_ref that does not exist', async () => {
     mockUserFindById.mockResolvedValue(null);
     const req = {
-      meta: { user: { userId: 'admin-1', role: 'ADMIN' } },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
       body: { location: 'l', region: 'r', city: 'c', user_ref: 'ghost' },
     } as unknown as Request;
     const res = mockRes();
@@ -146,7 +146,7 @@ describe('AddressController.create', () => {
     mockUserFindById.mockResolvedValue({ _id: 'target-1' });
     mockSave.mockResolvedValue({ _id: 'addr-3' });
     const req = {
-      meta: { user: { userId: 'admin-1', role: 'ADMIN' } },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
       body: { location: 'l', region: 'r', city: 'c', user_ref: 'target-1' },
     } as unknown as Request;
     const res = mockRes();
@@ -174,7 +174,7 @@ describe('AddressController.list', () => {
   it('returns every address for ADMIN, with no ownership filter', async () => {
     mockFind.mockResolvedValue([{ _id: '1' }, { _id: '2' }]);
     const req = {
-      meta: { user: { userId: 'admin-1', role: 'ADMIN' } },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
     } as Request;
     const res = mockRes();
 
@@ -189,7 +189,7 @@ describe('AddressController.list', () => {
     mockUserFindById.mockResolvedValue({ addresses: ['addr-1', 'addr-2'] });
     mockFind.mockResolvedValue([{ _id: 'addr-1' }]);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
     } as Request;
     const res = mockRes();
 
@@ -205,7 +205,7 @@ describe('AddressController.list', () => {
     mockUserFindById.mockResolvedValue({ addresses: ['addr-9'] });
     mockFind.mockResolvedValue([]);
     const req = {
-      meta: { user: { userId: 'supplier-1', role: 'SUPPLIER' } },
+      meta: { user: { userId: 'supplier-1', roles: ['SUPPLIER'] } },
     } as Request;
     const res = mockRes();
 
@@ -229,7 +229,7 @@ describe('AddressController.getById', () => {
   it('returns 404 when the address does not exist', async () => {
     mockFindById.mockResolvedValue(null);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: 'missing' },
     } as unknown as Request;
     const res = mockRes();
@@ -243,7 +243,7 @@ describe('AddressController.getById', () => {
     mockFindById.mockResolvedValue({ _id: { toString: () => 'addr-1' } });
     mockUserFindById.mockResolvedValue({ addresses: ['addr-2'] });
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: 'addr-1' },
     } as unknown as Request;
     const res = mockRes();
@@ -257,7 +257,7 @@ describe('AddressController.getById', () => {
     mockFindById.mockResolvedValue({ _id: { toString: () => 'addr-1' } });
     mockUserFindById.mockResolvedValue({ addresses: ['addr-1'] });
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: 'addr-1' },
     } as unknown as Request;
     const res = mockRes();
@@ -270,7 +270,7 @@ describe('AddressController.getById', () => {
   it('lets ADMIN fetch any address regardless of ownership', async () => {
     mockFindById.mockResolvedValue({ _id: { toString: () => 'addr-1' } });
     const req = {
-      meta: { user: { userId: 'admin-1', role: 'ADMIN' } },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
       params: { _id: 'addr-1' },
     } as unknown as Request;
     const res = mockRes();
@@ -296,7 +296,7 @@ describe('AddressController.update', () => {
   it('returns 404 when the address does not exist', async () => {
     mockFindById.mockResolvedValue(null);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: 'missing' },
       body: { city: 'new city' },
     } as unknown as Request;
@@ -314,7 +314,7 @@ describe('AddressController.update', () => {
       .spyOn(BaseController.prototype, 'update')
       .mockResolvedValue(undefined);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: 'addr-1' },
       body: { city: 'new city' },
     } as unknown as Request;
@@ -334,7 +334,7 @@ describe('AddressController.update', () => {
       .spyOn(BaseController.prototype, 'update')
       .mockResolvedValue(undefined);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: 'addr-1' },
       body: { city: 'new city' },
     } as unknown as Request;
@@ -352,7 +352,7 @@ describe('AddressController.update', () => {
       .spyOn(BaseController.prototype, 'update')
       .mockResolvedValue(undefined);
     const req = {
-      meta: { user: { userId: 'admin-1', role: 'ADMIN' } },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
       params: { _id: 'addr-1' },
       body: { city: 'new city' },
     } as unknown as Request;
@@ -380,7 +380,7 @@ describe('AddressController.delete', () => {
   it('returns 404 when the address does not exist', async () => {
     mockFindById.mockResolvedValue(null);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: 'missing' },
     } as unknown as Request;
     const res = mockRes();
@@ -397,7 +397,7 @@ describe('AddressController.delete', () => {
       .spyOn(BaseController.prototype, 'delete')
       .mockResolvedValue(undefined);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: 'addr-1' },
     } as unknown as Request;
     const res = mockRes();
@@ -417,7 +417,7 @@ describe('AddressController.delete', () => {
       .spyOn(BaseController.prototype, 'delete')
       .mockResolvedValue(undefined);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: 'addr-1' },
     } as unknown as Request;
     const res = mockRes();
@@ -440,7 +440,7 @@ describe('AddressController.delete', () => {
       .spyOn(BaseController.prototype, 'delete')
       .mockResolvedValue(undefined);
     const req = {
-      meta: { user: { userId: 'admin-1', role: 'ADMIN' } },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
       params: { _id: 'addr-1' },
     } as unknown as Request;
     const res = mockRes();

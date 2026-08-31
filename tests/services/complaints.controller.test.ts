@@ -39,7 +39,7 @@ describe('ComplaintController.list', () => {
   it('queries with an empty filter (all complaints) for ADMIN', async () => {
     mockFind.mockResolvedValue([{ _id: '1' }, { _id: '2' }]);
     const req = {
-      meta: { user: { userId: 'admin-1', role: 'ADMIN' } },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
     } as Request;
     const res = mockRes();
 
@@ -55,7 +55,7 @@ describe('ComplaintController.list', () => {
   it('scopes the query to creator_ref for a non-admin', async () => {
     mockFind.mockResolvedValue([{ _id: '1' }]);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
     } as Request;
     const res = mockRes();
 
@@ -68,7 +68,7 @@ describe('ComplaintController.list', () => {
   it("also scopes a SUPPLIER caller to their own creator_ref (never sees others' complaints)", async () => {
     mockFind.mockResolvedValue([]);
     const req = {
-      meta: { user: { userId: 'supplier-1', role: 'SUPPLIER' } },
+      meta: { user: { userId: 'supplier-1', roles: ['SUPPLIER'] } },
     } as Request;
     const res = mockRes();
 
@@ -98,7 +98,7 @@ describe('ComplaintController.create', () => {
       .spyOn(BaseController.prototype, 'create')
       .mockResolvedValue(undefined);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       body: { creator_ref: 'someone-else', title: 't', description: 'd' },
     } as unknown as Request;
     const res = mockRes();
@@ -115,7 +115,7 @@ describe('ComplaintController.create', () => {
       .spyOn(BaseController.prototype, 'create')
       .mockResolvedValue(undefined);
     const req = {
-      meta: { user: { userId: 'supplier-1', role: 'SUPPLIER' } },
+      meta: { user: { userId: 'supplier-1', roles: ['SUPPLIER'] } },
       body: { title: 't', description: 'd' },
     } as unknown as Request;
     const res = mockRes();
@@ -142,7 +142,7 @@ describe('ComplaintController.getById', () => {
   it('returns 404 when the complaint does not exist', async () => {
     mockFindById.mockResolvedValue(null);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: 'missing' },
     } as unknown as Request;
     const res = mockRes();
@@ -155,7 +155,7 @@ describe('ComplaintController.getById', () => {
   it('returns 403 when a non-admin requests a complaint they did not file', async () => {
     mockFindById.mockResolvedValue({ creator_ref: 'someone-else' });
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
     } as unknown as Request;
     const res = mockRes();
@@ -168,7 +168,7 @@ describe('ComplaintController.getById', () => {
   it('returns the complaint for the retailer/supplier who filed it', async () => {
     mockFindById.mockResolvedValue({ creator_ref: 'retailer-1' });
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
     } as unknown as Request;
     const res = mockRes();
@@ -181,7 +181,7 @@ describe('ComplaintController.getById', () => {
   it('lets ADMIN fetch any complaint regardless of who filed it', async () => {
     mockFindById.mockResolvedValue({ creator_ref: 'someone-else' });
     const req = {
-      meta: { user: { userId: 'admin-1', role: 'ADMIN' } },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
       params: { _id: '1' },
     } as unknown as Request;
     const res = mockRes();
@@ -206,7 +206,7 @@ describe('ComplaintController.update', () => {
   it('returns 404 when the complaint does not exist', async () => {
     mockFindById.mockResolvedValue(null);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: 'missing' },
       body: { title: 'new title' },
     } as unknown as Request;
@@ -221,7 +221,7 @@ describe('ComplaintController.update', () => {
     const doc = { creator_ref: 'someone-else', save: jest.fn() };
     mockFindById.mockResolvedValue(doc);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
       body: { title: 'new title' },
     } as unknown as Request;
@@ -241,7 +241,7 @@ describe('ComplaintController.update', () => {
     };
     mockFindById.mockResolvedValue(doc);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
       body: { title: 'new title', priority: 'HIGH' },
     } as unknown as Request;
@@ -264,7 +264,7 @@ describe('ComplaintController.update', () => {
     };
     mockFindById.mockResolvedValue(doc);
     const req = {
-      meta: { user: { userId: 'retailer-1', role: 'RETAILER' } },
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
       body: { status: 'RESOLVED', resolution: 'self-resolved' },
     } as unknown as Request;
@@ -287,7 +287,7 @@ describe('ComplaintController.update', () => {
     };
     mockFindById.mockResolvedValue(doc);
     const req = {
-      meta: { user: { userId: 'admin-1', role: 'ADMIN' } },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
       params: { _id: '1' },
       body: { status: 'RESOLVED', resolution: 'refunded the retailer' },
     } as unknown as Request;

@@ -47,8 +47,7 @@ class PoolParticipantController extends BaseController {
 
       await super.create(req, res);
     } catch (error) {
-      this.logger.error(`PoolParticipant Creation: ${error}`);
-      res.status(500).send({ message: 'Internal server error' });
+      this.errorHandler(error, req, res);
     }
   }
 
@@ -63,8 +62,9 @@ class PoolParticipantController extends BaseController {
         return;
       }
 
-      const filter: Record<string, unknown> =
-        user.role === 'ADMIN' ? {} : { user_ref: user.userId };
+      const filter: Record<string, unknown> = user.roles.includes('ADMIN')
+        ? {}
+        : { user_ref: user.userId };
 
       if (req.query.pool_ref) {
         filter.pool_ref = req.query.pool_ref;
@@ -78,10 +78,7 @@ class PoolParticipantController extends BaseController {
         total: docs.length,
       });
     } catch (error) {
-      this.logger.error(
-        `Retrieving ${this.model.modelName} documents: ${error}`
-      );
-      res.status(500).send({ message: 'Internal server error' });
+      this.errorHandler(error, req, res);
     }
   }
 
@@ -100,7 +97,10 @@ class PoolParticipantController extends BaseController {
         return;
       }
 
-      if (user.role !== 'ADMIN' && doc.user_ref.toString() !== user.userId) {
+      if (
+        !user.roles.includes('ADMIN') &&
+        doc.user_ref.toString() !== user.userId
+      ) {
         res.status(403).send({ message: ERRORS.UNAUTHORIZED });
         return;
       }
@@ -110,8 +110,7 @@ class PoolParticipantController extends BaseController {
         data: doc,
       });
     } catch (error) {
-      this.logger.error(`Retrieving specified document: ${error}`);
-      res.status(500).send({ message: 'Internal server error' });
+      this.errorHandler(error, req, res);
     }
   }
 
@@ -154,8 +153,7 @@ class PoolParticipantController extends BaseController {
 
       await super.update(req, res);
     } catch (error) {
-      this.logger.error(`PoolParticipant Update: ${error}`);
-      res.status(500).send({ message: 'Internal server error' });
+      this.errorHandler(error, req, res);
     }
   }
 
@@ -210,8 +208,7 @@ class PoolParticipantController extends BaseController {
 
       await super.delete(req, res);
     } catch (error) {
-      this.logger.error(`PoolParticipant Delete: ${error}`);
-      res.status(500).send({ message: 'Internal server error' });
+      this.errorHandler(error, req, res);
     }
   }
 }

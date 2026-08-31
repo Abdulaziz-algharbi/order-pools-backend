@@ -16,7 +16,7 @@ declare global {
       meta: {
         user?: {
           userId: string;
-          role: UserRole;
+          roles: UserRole[];
         };
       };
     }

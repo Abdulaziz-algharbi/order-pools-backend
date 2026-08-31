@@ -35,8 +35,11 @@ describe('tokenMiddleware', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
-  it('attaches userId and role from a valid token and calls next', () => {
-    const token = jwtUtil.createAccessToken({ _id: 'user-1', role: 'ADMIN' });
+  it('attaches userId and roles from a valid token and calls next', () => {
+    const token = jwtUtil.createAccessToken({
+      _id: 'user-1',
+      roles: ['ADMIN'],
+    });
     const req = {
       headers: { authorization: `Bearer ${token}` },
     } as Request & { meta: any };
@@ -46,7 +49,27 @@ describe('tokenMiddleware', () => {
     tokenMiddleware(req, res, next);
 
     expect(next).toHaveBeenCalled();
-    expect(req.meta.user).toEqual({ userId: 'user-1', role: 'ADMIN' });
+    expect(req.meta.user).toEqual({ userId: 'user-1', roles: ['ADMIN'] });
     expect(res.status).not.toHaveBeenCalled();
+  });
+
+  it('attaches multiple roles from a dual-role token', () => {
+    const token = jwtUtil.createAccessToken({
+      _id: 'user-1',
+      roles: ['RETAILER', 'SUPPLIER'],
+    });
+    const req = {
+      headers: { authorization: `Bearer ${token}` },
+    } as Request & { meta: any };
+    const res = mockRes();
+    const next = jest.fn();
+
+    tokenMiddleware(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(req.meta.user).toEqual({
+      userId: 'user-1',
+      roles: ['RETAILER', 'SUPPLIER'],
+    });
   });
 });
