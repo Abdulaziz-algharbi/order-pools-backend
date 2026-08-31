@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import BaseController from '../base/base.controller';
 import ERRORS from '../../constants/ERRORS';
-import productModel from '../products/product.model';
 import productOfferModel from '../product.offers/product.offer.model';
 import Pool, { couldBeUpdated } from './pool.model';
 
@@ -11,19 +10,14 @@ class PoolController extends BaseController {
     this.logger.info('Pool initialized');
   }
 
-  // Offer ids built from this supplier's own products
-  // (Product.user_ref -> ProductOffer.product_ref -> Pool.productoffer_ref).
+  // Offer ids built from this supplier's own offers
+  // (ProductOffer.user_ref -> Pool.productoffer_ref).
   private async ownOfferIds(userId: string) {
-    const productIds = await productModel.distinct('_id', {
-      user_ref: userId,
-    });
-    return productOfferModel.distinct('_id', {
-      product_ref: { $in: productIds },
-    });
+    return productOfferModel.distinct('_id', { user_ref: userId });
   }
 
   // Anonymous callers and RETAILER see only OPEN (actively collecting)
-  // pools. SUPPLIER sees only pools built from their own products,
+  // pools. SUPPLIER sees only pools built from their own offers,
   // regardless of status. ADMIN sees every pool.
   async list(req: Request, res: Response): Promise<void> {
     try {

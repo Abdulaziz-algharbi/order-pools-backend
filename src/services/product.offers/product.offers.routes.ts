@@ -10,22 +10,34 @@ const router = Router();
 
 router
   .route('/')
-  .get(productOffersController.list.bind(productOffersController))
+  .get(
+    tokenMiddleware,
+    requireRole('SUPPLIER', 'ADMIN'),
+    productOffersController.list.bind(productOffersController)
+  )
   .post(
+    tokenMiddleware,
+    requireRole('SUPPLIER'),
     validate(createProductOfferSchema),
     productOffersController.create.bind(productOffersController)
   );
 
 router
   .route('/:_id')
-  .get(productOffersController.getById.bind(productOffersController))
+  .get(
+    tokenMiddleware,
+    requireRole('SUPPLIER', 'ADMIN'),
+    productOffersController.getById.bind(productOffersController)
+  )
   .patch(
+    tokenMiddleware,
+    requireRole('SUPPLIER', 'ADMIN'),
     validate(updateProductOfferSchema),
     productOffersController.update.bind(productOffersController)
   )
   .delete(
     tokenMiddleware,
-    requireRole('ADMIN'),
+    requireRole('SUPPLIER', 'ADMIN'),
     productOffersController.delete.bind(productOffersController)
   );
 

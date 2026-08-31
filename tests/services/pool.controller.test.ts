@@ -9,11 +9,6 @@ jest.mock('../../src/services/pools/pool.model', () => {
   };
 });
 
-jest.mock('../../src/services/products/product.model', () => ({
-  __esModule: true,
-  default: { distinct: jest.fn() },
-}));
-
 jest.mock('../../src/services/product.offers/product.offer.model', () => ({
   __esModule: true,
   default: { distinct: jest.fn() },
@@ -21,12 +16,10 @@ jest.mock('../../src/services/product.offers/product.offer.model', () => ({
 
 import poolController from '../../src/services/pools/pool.controller';
 import poolModel from '../../src/services/pools/pool.model';
-import productModel from '../../src/services/products/product.model';
 import productOfferModel from '../../src/services/product.offers/product.offer.model';
 
 const mockFind = poolModel.find as unknown as jest.Mock;
 const mockFindById = poolModel.findById as unknown as jest.Mock;
-const mockProductDistinct = productModel.distinct as unknown as jest.Mock;
 const mockOfferDistinct = productOfferModel.distinct as unknown as jest.Mock;
 
 function mockRes() {
@@ -58,11 +51,10 @@ describe('PoolController.list', () => {
     await poolController.list(req, res);
 
     expect(mockFind).toHaveBeenCalledWith({ status: 'OPEN' });
-    expect(mockProductDistinct).not.toHaveBeenCalled();
+    expect(mockOfferDistinct).not.toHaveBeenCalled();
   });
 
-  it('scopes a SUPPLIER to pools built from their own products, any status', async () => {
-    mockProductDistinct.mockResolvedValue(['product-1']);
+  it('scopes a SUPPLIER to pools built from their own offers, any status', async () => {
     mockOfferDistinct.mockResolvedValue(['offer-1']);
     mockFind.mockResolvedValue([]);
     const req = {
@@ -72,11 +64,8 @@ describe('PoolController.list', () => {
 
     await poolController.list(req, res);
 
-    expect(mockProductDistinct).toHaveBeenCalledWith('_id', {
-      user_ref: 'supplier-1',
-    });
     expect(mockOfferDistinct).toHaveBeenCalledWith('_id', {
-      product_ref: { $in: ['product-1'] },
+      user_ref: 'supplier-1',
     });
     expect(mockFind).toHaveBeenCalledWith({
       productoffer_ref: { $in: ['offer-1'] },
@@ -167,7 +156,6 @@ describe('PoolController.getById', () => {
       status: 'OPEN',
       productoffer_ref: { toString: () => 'offer-9' },
     });
-    mockProductDistinct.mockResolvedValue(['product-1']);
     mockOfferDistinct.mockResolvedValue(['offer-1']);
     const req = {
       meta: { user: { userId: 'supplier-1', role: 'SUPPLIER' } },
@@ -185,7 +173,6 @@ describe('PoolController.getById', () => {
       status: 'CANCELLED',
       productoffer_ref: { toString: () => 'offer-1' },
     });
-    mockProductDistinct.mockResolvedValue(['product-1']);
     mockOfferDistinct.mockResolvedValue(['offer-1']);
     const req = {
       meta: { user: { userId: 'supplier-1', role: 'SUPPLIER' } },

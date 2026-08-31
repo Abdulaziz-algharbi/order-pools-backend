@@ -1,7 +1,6 @@
 import { Router } from 'express';
 
 import users from '../../../services/users';
-import products from '../../../services/products';
 import productOffers from '../../../services/product.offers';
 import addresses from '../../../services/addresses';
 import auth from '../../../services/auth';
@@ -18,7 +17,6 @@ const router = Router();
 router.use('/auth', auth.routes);
 router.use('/users', users.routes);
 router.use('/addresses', addresses.routes);
-router.use('/products', products.routes);
 router.use('/offers', productOffers.routes);
 router.use('/pools', pools.routes);
 router.use('/participants', poolParticipants.routes);

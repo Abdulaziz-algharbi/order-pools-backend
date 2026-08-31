@@ -4,7 +4,6 @@ import BaseController from '../base/base.controller';
 import poolParticipantModel from '../pool.participants/pool.participant.model';
 import poolModel from '../pools/pool.model';
 import productOfferModel from '../product.offers/product.offer.model';
-import productModel from '../products/product.model';
 import type { UserRole } from '../users/user.model';
 import deliveryModel, { couldBeUpdated } from './delivery.model';
 
@@ -54,7 +53,7 @@ class DeliveryController extends BaseController {
 
   // Admin sees every delivery. A retailer sees deliveries for pools they
   // joined; a supplier sees deliveries for pools built from their own
-  // products (Pool -> ProductOffer -> Product.user_ref).
+  // offers (Pool -> ProductOffer.user_ref).
   async list(req: Request, res: Response): Promise<void> {
     try {
       const user = req.meta.user;
@@ -121,13 +120,9 @@ class DeliveryController extends BaseController {
 
   // Pool ids a non-admin caller is allowed to see a delivery for.
   private async visiblePoolIds(user: { userId: string; role: UserRole }) {
-    // TODO: need to be refined three requests to DB? redesign the data model
     if (user.role === 'SUPPLIER') {
-      const productIds = await productModel.distinct('_id', {
-        user_ref: user.userId,
-      });
       const offerIds = await productOfferModel.distinct('_id', {
-        product_ref: { $in: productIds },
+        user_ref: user.userId,
       });
       return poolModel.distinct('_id', {
         productoffer_ref: { $in: offerIds },

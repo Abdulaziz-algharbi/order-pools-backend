@@ -1,47 +1,57 @@
 @baseUrl=http://localhost:8000/api/v1/offers
 @productOfferId=6a86e87537758866e94b8ab8
-@productId="6a7c204078d65e3825b64c68"
+@supplierToken=REPLACE_WITH_SUPPLIER_ACCESS_TOKEN
+@adminToken=REPLACE_WITH_ADMIN_ACCESS_TOKEN
 
 
-### create productOffer
+### create productOffer (SUPPLIER only; user_ref is taken from the token)
 
 POST {{baseUrl}}
 Content-Type: application/json
+Authorization: Bearer {{supplierToken}}
 
 {
-    "product_ref": {{productId}},
-    "wholeQuantity": 10,
+    "name": "Basmati Rice 25kg",
+    "description": "Long-grain basmati rice, wholesale sack",
+    "brand": "Al Reef",
+    "unit": "CARTON",
+    "wholeQuantity": 500,
     "price": 20
 }
 
-### list productOffer
+### list productOffer (SUPPLIER: own offers only; ADMIN: all)
 
 GET {{baseUrl}}
+Authorization: Bearer {{supplierToken}}
 
-### get productOffer by id
+### get productOffer by id (SUPPLIER: own only; ADMIN: any)
 
 GET {{baseUrl}}/{{productOfferId}}
+Authorization: Bearer {{supplierToken}}
 
-### update productOffer
+### update productOffer as SUPPLIER (wholeQuantity/price only, own offer)
 
 PATCH {{baseUrl}}/{{productOfferId}}
 Content-Type: application/json
+Authorization: Bearer {{supplierToken}}
 
 {
     "wholeQuantity": 50,
     "price": 7
 }
 
-### delete productOffer
+### update productOffer as ADMIN (status/adminComment only)
+
+PATCH {{baseUrl}}/{{productOfferId}}
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+    "status": "REJECTED",
+    "adminComment": "Price too high for current market"
+}
+
+### delete productOffer (SUPPLIER: own only; ADMIN: any; REJECTED offers also auto-delete after 7 days)
 
 DELETE {{baseUrl}}/{{productOfferId}}
-
-
-#  Ref_ID product ID is required
-#     product_ref: {
-#       type: Types.ObjectId,
-#       ref: 'Product',
-#       required: true,
-#     },
-#     wholeQuantity: { type: Number, required: true },
-#     price: { type: Number, required: true },
+Authorization: Bearer {{supplierToken}}

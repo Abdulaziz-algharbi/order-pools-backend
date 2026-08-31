@@ -29,11 +29,6 @@ jest.mock(
   })
 );
 
-jest.mock('../../src/services/products/product.model', () => ({
-  __esModule: true,
-  default: { distinct: jest.fn() },
-}));
-
 jest.mock('../../src/services/product.offers/product.offer.model', () => ({
   __esModule: true,
   default: { distinct: jest.fn() },
@@ -44,7 +39,6 @@ import deliveryController from '../../src/services/deliveries/deliveries.control
 import deliveryModel from '../../src/services/deliveries/delivery.model';
 import poolModel from '../../src/services/pools/pool.model';
 import poolParticipantModel from '../../src/services/pool.participants/pool.participant.model';
-import productModel from '../../src/services/products/product.model';
 import productOfferModel from '../../src/services/product.offers/product.offer.model';
 
 const mockFind = deliveryModel.find as unknown as jest.Mock;
@@ -54,7 +48,6 @@ const mockPoolFindById = poolModel.findById as unknown as jest.Mock;
 const mockPoolDistinct = poolModel.distinct as unknown as jest.Mock;
 const mockParticipantDistinct =
   poolParticipantModel.distinct as unknown as jest.Mock;
-const mockProductDistinct = productModel.distinct as unknown as jest.Mock;
 const mockOfferDistinct = productOfferModel.distinct as unknown as jest.Mock;
 
 function mockRes() {
@@ -171,8 +164,7 @@ describe('DeliveryController.list', () => {
     });
   });
 
-  it('scopes a SUPPLIER to pools built from their own products', async () => {
-    mockProductDistinct.mockResolvedValue(['product-1']);
+  it('scopes a SUPPLIER to pools built from their own offers', async () => {
     mockOfferDistinct.mockResolvedValue(['offer-1']);
     mockPoolDistinct.mockResolvedValue(['pool-9']);
     mockFind.mockResolvedValue([]);
@@ -183,11 +175,8 @@ describe('DeliveryController.list', () => {
 
     await deliveryController.list(req, res);
 
-    expect(mockProductDistinct).toHaveBeenCalledWith('_id', {
-      user_ref: 'supplier-1',
-    });
     expect(mockOfferDistinct).toHaveBeenCalledWith('_id', {
-      product_ref: { $in: ['product-1'] },
+      user_ref: 'supplier-1',
     });
     expect(mockPoolDistinct).toHaveBeenCalledWith('_id', {
       productoffer_ref: { $in: ['offer-1'] },
