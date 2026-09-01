@@ -1,9 +1,11 @@
 @baseUrl=http://localhost:8000/api/v1/pools
-@poolId=6a8136f57464a01bfe7222c8
-@productOfferId="6a7c25d44c99595aa3ec7389"
-@adminAccessToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2YTcxYzU4YmVjN2VlOTQ2M2FlYWNjNDAiLCJyb2xlIjoiQURNSU4iLCJpYXQiOjE3ODgwNzQ1NzYsImV4cCI6MTc4ODA3ODE3Nn0.oP71agPnc5ewwm9ATOBj0slT3rdpe4aYyUuvZWepXyc
-@supplierAccessToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2YTcxYzU4YmVjN2VlOTQ2M2FlYWNjNDAiLCJyb2xlIjoiU1VQUExJRVIiLCJpYXQiOjE3ODgwNzQ1NzYsImV4cCI6MTc4ODA3ODE3Nn0.oP71agPnc5ewwm9ATOBj0slT3rdpe4aYyUuvZWepXyc
+@poolId=REPLACE_WITH_POOL_ID
+@productOfferId=REPLACE_WITH_PRODUCT_OFFER_ID
+@adminAccessToken=REPLACE_WITH_ADMIN_ACCESS_TOKEN
+@supplierAccessToken=REPLACE_WITH_SUPPLIER_ACCESS_TOKEN
 
+# See 00-smooth-flow.http for a chained run that creates a real offer/pool/
+# tokens end to end instead of hand-editing the placeholders above.
 
 ### create pool (ADMIN only)
 
@@ -12,7 +14,7 @@ Content-Type: application/json
 Authorization: Bearer {{adminAccessToken}}
 
 {
-    "productoffer_ref": {{productOfferId}},
+    "productoffer_ref": "{{productOfferId}}",
     "currentQuantity": 70,
     "minimumContribution": 10,
     "pricePerUnit": 1,
@@ -48,30 +50,28 @@ Authorization: Bearer {{adminAccessToken}}
     "pricePerUnit": 7
 }
 
-### reopen a CANCELLED pool (ADMIN only) — resets startDate as the collection window restarts
+### mark a pool as having reached its target (ADMIN only) — required before
+### a delivery can be created for it (see deliveries.http)
 
 PATCH {{baseUrl}}/{{poolId}}
 Content-Type: application/json
 Authorization: Bearer {{adminAccessToken}}
 
 {
-    "status": "OPEN",
-    "startDate": "2026-09-01T00:00:00Z",
-    "endDate": "2026-09-15T00:00:00Z"
+    "status": "TARGET_REACHED"
+}
+
+### reopen a CANCELLED pool back to OPEN (ADMIN only) — resets startDate as the collection window restarts
+
+PATCH {{baseUrl}}/{{poolId}}
+Content-Type: application/json
+Authorization: Bearer {{adminAccessToken}}
+
+{
+    "status": "OPEN"
 }
 
 ### delete pool (ADMIN only)
 
 DELETE {{baseUrl}}/{{poolId}}
 Authorization: Bearer {{adminAccessToken}}
-
-
-#     productoffer_ref: {
-#       type: Types.ObjectId,
-#       ref: 'ProductOffer',
-#       required: true,
-#     },
-#     currentQuantity: { type: Number, required: true },
-#     minimumContribution: { type: Number, required: true },
-#     pricePerUnit: { type: Number, required: true },
-#     endDate: { type: Date, required: true },

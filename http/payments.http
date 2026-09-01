@@ -1,15 +1,17 @@
 @baseUrl=http://localhost:8000/api/v1/payments
-@paymentId=6a86e66b698536e9980baa15
-@userID="6a71c282ec9d84c27d309e8d"
+@paymentId=REPLACE_WITH_PAYMENT_ID
+@userID=REPLACE_WITH_USER_ID
 
-
+# This route has no auth/role checks wired up yet — anyone can create a
+# payment for any user_ref. See 00-smooth-flow.http for a chained run
+# that creates a real user/payment end to end.
 ### create payment
 
 POST {{baseUrl}}
 Content-Type: application/json
 
 {
-    "user_ref": {{userID}},
+    "user_ref": "{{userID}}",
     "transactionReference": "s3 urls",
     "amount": 50,
     "stripePaymentIntentId": "stripe id"
@@ -35,24 +37,3 @@ Content-Type: application/json
 ### delete payment
 
 DELETE {{baseUrl}}/{{paymentId}}
-
-
-
-# // Ref_ID user ID, poolParticipant ID are required
-#     user_ref: {
-#       type: Types.ObjectId,
-#       ref: 'User',
-#       required: true,
-#     },
-#     transactionReference: {
-#       type: String,
-#       required: true,
-#     },
-#     amount: {
-#       type: Number,
-#       required: true,
-#     },
-#     stripePaymentIntentId: {
-#       type: String,
-#       required: true,
-#     }

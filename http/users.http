@@ -1,10 +1,12 @@
 @baseUrl=http://localhost:8000/api/v1/users
-@userId=6a7c2b41f389f6ed96dc98e8
-@addressIds=["6a731fd174b4f84b4767e2a8", "6a7c2ad3f389f6ed96dc98e5"]
+@userId=REPLACE_WITH_USER_ID
+@addressIds=["REPLACE_WITH_ADDRESS_ID_1", "REPLACE_WITH_ADDRESS_ID_2"]
 @adminToken=REPLACE_WITH_ADMIN_ACCESS_TOKEN
 
 # This module is ADMIN only end to end. Retailers/suppliers register, log
 # in, refresh, and read their own info via /auth instead — see auth.http.
+# See 00-smooth-flow.http for a chained run that creates real addresses/
+# tokens end to end instead of hand-editing the placeholders above.
 
 ### create user (ADMIN only; roles defaults to ["RETAILER"] if omitted)
 POST {{baseUrl}}

@@ -1,0 +1,292 @@
+### =====================================================================
+### Smooth end-to-end flow (REST Client extension)
+###
+### Onboards a retailer and a supplier, gets a product offer approved,
+### opens a pool, has the retailer join it, pushes the pool to target,
+### assigns a delivery, and confirms both parties actually got notified.
+### Run every request top-to-bottom with "Send Request" — each step
+### captures the ids/tokens the next one needs, so nothing below needs
+### hand-editing except the two admin credentials.
+###
+### Prerequisites:
+###   1. Mongo + API running: `docker-compose up -d mongo` and `npm run dev`.
+###   2. An admin account — there is no public admin-registration endpoint.
+###      The credentials below already point at a throwaway admin seeded
+###      into this project's local dev DB (smoothflow-admin@test.local).
+###      If you ever wipe that DB, recreate it with:
+###        SEED_ADMIN_1_EMAIL=smoothflow-admin@test.local \
+###        SEED_ADMIN_1_PASSWORD=SmoothFlowAdmin123 npm run seed:admins
+###      or swap in your own admin's email/password below.
+###
+### Re-running from the top will fail at step 3/4 with 409 Conflict
+### (email already registered) — either bump the two emails below or
+### skip straight to step 6 (admin login) and reuse the ids/tokens you
+### already have from the first run.
+### =====================================================================
+
+@root = http://localhost:8000/api/v1
+@adminEmail = smoothflow-admin@test.local
+@adminPassword = SmoothFlowAdmin123
+
+### 1. Address for the retailer (anonymous — collected before the account exists)
+
+# @name retailerAddress
+POST {{root}}/addresses
+Content-Type: application/json
+
+{
+  "location": "https://maps.app.goo.gl/retailer-warehouse",
+  "region": "Muscat",
+  "city": "Al Khuwair"
+}
+
+###
+
+@retailerAddressId = {{retailerAddress.response.body._id}}
+
+### 2. Address for the soon-to-be supplier
+
+# @name supplierAddress
+POST {{root}}/addresses
+Content-Type: application/json
+
+{
+  "location": "https://maps.app.goo.gl/supplier-warehouse",
+  "region": "Al-Batinah",
+  "city": "Sohar"
+}
+
+###
+
+@supplierAddressId = {{supplierAddress.response.body._id}}
+
+### 3. Register the retailer
+
+# @name registerRetailer
+POST {{root}}/auth/register
+Content-Type: application/json
+
+{
+  "firstName": "Rashid",
+  "lastName": "Retailer",
+  "email": "rashid.retailer@example.com",
+  "phoneNumber": "+96891149027",
+  "companyName": "Rashid Retail LLC",
+  "password": "RetailerPass123",
+  "addresses": ["{{retailerAddressId}}"]
+}
+
+###
+
+@retailerToken = {{registerRetailer.response.body.accessToken}}
+
+### 4. Register the future supplier (every registration starts as RETAILER only)
+
+# @name registerSupplier
+POST {{root}}/auth/register
+Content-Type: application/json
+
+{
+  "firstName": "Salim",
+  "lastName": "Supplier",
+  "email": "salim.supplier@example.com",
+  "phoneNumber": "+96891149028",
+  "companyName": "Salim Wholesale Foods",
+  "password": "SupplierPass123",
+  "addresses": ["{{supplierAddressId}}"]
+}
+
+###
+
+@supplierBootstrapToken = {{registerSupplier.response.body.accessToken}}
+
+### 5. That user files a supplier request
+
+# @name supplierRequest
+POST {{root}}/supplier-requests
+Content-Type: application/json
+Authorization: Bearer {{supplierBootstrapToken}}
+
+{
+  "description": "We are a wholesale rice and cooking-oil distributor looking to sell through OrderPools."
+}
+
+###
+
+@supplierRequestId = {{supplierRequest.response.body.data._id}}
+
+### 6. Admin logs in (run `npm run seed:admins` first if this account doesn't exist yet)
+
+# @name adminLogin
+POST {{root}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+
+###
+
+@adminToken = {{adminLogin.response.body.accessToken}}
+
+### 7. Admin approves the request — adds SUPPLIER onto the user's existing roles
+
+PATCH {{root}}/supplier-requests/{{supplierRequestId}}
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "status": "APPROVED",
+  "adminComment": "Verified commercial registration"
+}
+
+### 8. The now-supplier logs in again for a token that actually carries SUPPLIER
+###    (roles are baked into the JWT at issue time — the step-4 token still
+###    only says RETAILER, and /auth/refresh reuses that same stale payload,
+###    so a fresh login is the only way to pick up the new role)
+
+# @name supplierLogin
+POST {{root}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "salim.supplier@example.com",
+  "password": "SupplierPass123"
+}
+
+###
+
+@supplierToken = {{supplierLogin.response.body.accessToken}}
+
+### 9. Supplier creates a product offer
+
+# @name createOffer
+POST {{root}}/offers
+Content-Type: application/json
+Authorization: Bearer {{supplierToken}}
+
+{
+  "name": "Basmati Rice 25kg",
+  "description": "Long-grain basmati rice, wholesale sack",
+  "brand": "Al Reef",
+  "unit": "CARTON",
+  "wholeQuantity": 500,
+  "price": 20
+}
+
+###
+
+@offerId = {{createOffer.response.body._id}}
+
+### 10. Admin approves the offer
+
+PATCH {{root}}/offers/{{offerId}}
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "status": "APPROVED",
+  "adminComment": "Looks good"
+}
+
+### 11. Admin opens a pool for the approved offer
+
+# @name createPool
+POST {{root}}/pools
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "productoffer_ref": "{{offerId}}",
+  "currentQuantity": 0,
+  "minimumContribution": 10,
+  "pricePerUnit": 5,
+  "endDate": "2026-12-31T23:59:00Z"
+}
+
+###
+
+@poolId = {{createPool.response.body._id}}
+
+### 12. Retailer fetches their own profile to get their user id (needed as Payment.user_ref)
+
+# @name retailerMe
+GET {{root}}/auth/me
+Authorization: Bearer {{retailerToken}}
+
+###
+
+@retailerUserId = {{retailerMe.response.body.user._id}}
+
+### 13. Retailer pays (the payments route has no auth/business-logic wired up yet)
+
+# @name createPayment
+POST {{root}}/payments
+Content-Type: application/json
+
+{
+  "user_ref": "{{retailerUserId}}",
+  "transactionReference": "txn_smooth_flow_001",
+  "amount": 100,
+  "stripePaymentIntentId": "pi_smooth_flow_001"
+}
+
+###
+
+@paymentId = {{createPayment.response.body._id}}
+
+### 14. Retailer joins the pool
+
+# @name joinPool
+POST {{root}}/participants
+Content-Type: application/json
+Authorization: Bearer {{retailerToken}}
+
+{
+  "pool_ref": "{{poolId}}",
+  "payment_ref": "{{paymentId}}",
+  "address_ref": "{{retailerAddressId}}",
+  "quantity": 10
+}
+
+### 15. Admin marks the pool as having reached its target.
+###     Nothing today aggregates participants' quantities onto
+###     Pool.currentQuantity/status automatically (see CLAUDE.md — no
+###     transactional/aggregation logic exists yet) — an admin sets this
+###     by hand, same as a real admin would from the ops dashboard.
+
+PATCH {{root}}/pools/{{poolId}}
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "currentQuantity": 10,
+  "status": "TARGET_REACHED"
+}
+
+### 16. Admin assigns the delivery — raises DELIVERY_ASSIGNED, which notifies
+###     the offer's supplier and every participant of this pool
+
+# @name createDelivery
+POST {{root}}/deliveries
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "pool_ref": "{{poolId}}"
+}
+
+###
+
+@deliveryId = {{createDelivery.response.body._id}}
+
+### 17. Confirm the supplier got notified ("Delivery assigned")
+
+GET {{root}}/notifications
+Authorization: Bearer {{supplierToken}}
+
+### 18. Confirm the retailer got notified ("Your delivery is on its way")
+
+GET {{root}}/notifications
+Authorization: Bearer {{retailerToken}}

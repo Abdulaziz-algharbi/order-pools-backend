@@ -1,7 +1,10 @@
 @baseUrl=http://localhost:8000/api/v1/supplier-requests
-@requestId=6a86e87537758866e94b8ab8
+@requestId=REPLACE_WITH_SUPPLIER_REQUEST_ID
 @retailerToken=REPLACE_WITH_RETAILER_ACCESS_TOKEN
 @adminToken=REPLACE_WITH_ADMIN_ACCESS_TOKEN
+
+# See 00-smooth-flow.http for a chained run that creates a real request/
+# tokens end to end instead of hand-editing the placeholders above.
 
 
 ### submit a supplier request (RETAILER only, not already a SUPPLIER)

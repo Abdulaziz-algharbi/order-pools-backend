@@ -1,8 +1,11 @@
 @baseUrl=http://localhost:8000/api/v1/addresses
-@addressId=6a7c2ad3f389f6ed96dc98e5
-@targetUserId=6a71c282ec9d84c27d309e8d
-@accessToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2YTcxYzU4YmVjN2VlOTQ2M2FlYWNjNDAiLCJyb2xlIjoiUkVUQUlMRVIiLCJpYXQiOjE3ODgwNzQ1NzYsImV4cCI6MTc4ODA3ODE3Nn0.oP71agPnc5ewwm9ATOBj0slT3rdpe4aYyUuvZWepXyc
-@adminAccessToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2YTcxYzU4YmVjN2VlOTQ2M2FlYWNjNDAiLCJyb2xlIjoiQURNSU4iLCJpYXQiOjE3ODgwNzQ1NzYsImV4cCI6MTc4ODA3ODE3Nn0.oP71agPnc5ewwm9ATOBj0slT3rdpe4aYyUuvZWepXyc
+@addressId=REPLACE_WITH_ADDRESS_ID
+@targetUserId=REPLACE_WITH_USER_ID
+@accessToken=REPLACE_WITH_RETAILER_OR_SUPPLIER_ACCESS_TOKEN
+@adminAccessToken=REPLACE_WITH_ADMIN_ACCESS_TOKEN
+
+# See 00-smooth-flow.http for a fully chained run that creates real
+# addresses/tokens end to end instead of hand-editing the placeholders above.
 
 ### create address, anonymous (pre-registration bootstrap — not linked to any user)
 
@@ -37,7 +40,7 @@ Authorization: Bearer {{adminAccessToken}}
     "location": "https://share.google/UCp92LzP4tQFfHXke",
     "region": "Al-Batinah",
     "city": "Masnaah",
-    "user_ref": {{targetUserId}}
+    "user_ref": "{{targetUserId}}"
 }
 
 ### list addresses (ADMIN sees all; SUPPLIER/RETAILER only their own)
@@ -66,7 +69,3 @@ Authorization: Bearer {{accessToken}}
 
 DELETE {{baseUrl}}/{{addressId}}
 Authorization: Bearer {{accessToken}}
-
-#   location: { type: String, required: true },
-#   region: { type: String, required: true },
-#   city: { type: String, required: true },

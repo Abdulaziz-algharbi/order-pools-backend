@@ -1,10 +1,14 @@
 @baseUrl=http://localhost:8000/api/v1/participants
-@poolParticipantId=6a86e7aea09200db9b140cfa
-@poolId="6a8136f57464a01bfe7222c8"
-@paymentId="6a86e66b698536e9980baa15"
-@addressId="6a86e66b698536e9980baa20"
-@accessToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2YTcxYzU4YmVjN2VlOTQ2M2FlYWNjNDAiLCJyb2xlIjoiUkVUQUlMRVIiLCJpYXQiOjE3ODgwNzQ1NzYsImV4cCI6MTc4ODA3ODE3Nn0.oP71agPnc5ewwm9ATOBj0slT3rdpe4aYyUuvZWepXyc
+@poolParticipantId=REPLACE_WITH_POOL_PARTICIPANT_ID
+@poolId=REPLACE_WITH_POOL_ID
+@paymentId=REPLACE_WITH_PAYMENT_ID
+@addressId=REPLACE_WITH_RETAILER_OWN_ADDRESS_ID
+@accessToken=REPLACE_WITH_RETAILER_ACCESS_TOKEN
 
+# See 00-smooth-flow.http for a chained run that creates a real pool/
+# payment/address/token end to end instead of hand-editing the
+# placeholders above. Note address_ref must be one of the caller's own
+# addresses (checked server-side) — it can't just be any address id.
 
 ### create poolParticipant (RETAILER only — user_ref is derived from the token, not sent)
 
@@ -13,9 +17,9 @@ Content-Type: application/json
 Authorization: Bearer {{accessToken}}
 
 {
-    "pool_ref": {{poolId}},
-    "payment_ref": {{paymentId}},
-    "address_ref": {{addressId}},
+    "pool_ref": "{{poolId}}",
+    "payment_ref": "{{paymentId}}",
+    "address_ref": "{{addressId}}",
     "quantity": 15
 }
 
@@ -48,25 +52,3 @@ Authorization: Bearer {{accessToken}}
 
 DELETE {{baseUrl}}/{{poolParticipantId}}
 Authorization: Bearer {{accessToken}}
-
-
-# // Ref_ID user ID, pool ID and payment ID (hold) are required
-#     user_ref: {
-#       type: Types.ObjectId,
-#       ref: 'User',
-#       require: true,
-#     },
-#     pool_ref: {
-#       type: Types.ObjectId,
-#       ref: 'Pool',
-#       required: true,
-#     },
-#     payment_ref: {
-#       type: Types.ObjectId,
-#       ref: 'Payment',
-#       required: true,
-#     },
-#     quantity: {
-#       type: Number,
-#       required: true,
-#     },

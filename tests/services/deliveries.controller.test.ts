@@ -1,17 +1,25 @@
 import { Request, Response } from 'express';
 
+const mockDeliverySave = jest.fn();
+
 jest.mock('../../src/services/deliveries/delivery.model', () => {
   const actual = jest.requireActual(
     '../../src/services/deliveries/delivery.model'
   );
+  const MockDeliveryModel: any = jest.fn().mockImplementation(function (
+    this: any,
+    data: any
+  ) {
+    Object.assign(this, data);
+    this.save = mockDeliverySave;
+  });
+  MockDeliveryModel.modelName = 'Delivery';
+  MockDeliveryModel.find = jest.fn();
+  MockDeliveryModel.findById = jest.fn();
+  MockDeliveryModel.findOne = jest.fn();
   return {
     __esModule: true,
-    default: {
-      modelName: 'Delivery',
-      find: jest.fn(),
-      findById: jest.fn(),
-      findOne: jest.fn(),
-    },
+    default: MockDeliveryModel,
     couldBeUpdated: actual.couldBeUpdated,
   };
 });
@@ -34,12 +42,13 @@ jest.mock('../../src/services/product.offers/product.offer.model', () => ({
   default: { distinct: jest.fn() },
 }));
 
-import BaseController from '../../src/services/base/base.controller';
 import deliveryController from '../../src/services/deliveries/deliveries.controller';
 import deliveryModel from '../../src/services/deliveries/delivery.model';
 import poolModel from '../../src/services/pools/pool.model';
 import poolParticipantModel from '../../src/services/pool.participants/pool.participant.model';
 import productOfferModel from '../../src/services/product.offers/product.offer.model';
+import appBroker from '../../src/app.broker';
+import EVENTS from '../../src/constants/EVENTS';
 
 const mockFind = deliveryModel.find as unknown as jest.Mock;
 const mockFindById = deliveryModel.findById as unknown as jest.Mock;
@@ -109,16 +118,44 @@ describe('DeliveryController.create', () => {
       status: 'TARGET_REACHED',
     });
     mockFindOne.mockResolvedValue(null);
-    const superCreate = jest
-      .spyOn(BaseController.prototype, 'create')
-      .mockResolvedValue(undefined);
-    const req = { body: { pool_ref: 'pool-1' } } as unknown as Request;
+    mockDeliverySave.mockResolvedValue({ _id: 'delivery-1' });
+    const req = {
+      body: { pool_ref: 'pool-1' },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
+    } as unknown as Request;
     const res = mockRes();
 
     await deliveryController.create(req, res);
 
-    expect(superCreate).toHaveBeenCalledWith(req, res);
-    superCreate.mockRestore();
+    expect(mockDeliverySave).toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(201);
+  });
+
+  it('emits DELIVERY_ASSIGNED with the new delivery/pool ids and the acting admin once created', async () => {
+    mockPoolFindById.mockResolvedValue({
+      _id: 'pool-1',
+      status: 'TARGET_REACHED',
+    });
+    mockFindOne.mockResolvedValue(null);
+    mockDeliverySave.mockResolvedValue({ _id: 'delivery-1' });
+    const req = {
+      body: { pool_ref: 'pool-1' },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
+    } as unknown as Request;
+    const res = mockRes();
+
+    const emitted = jest.fn();
+    const unsubscribe = appBroker.on(EVENTS.DELIVERY_ASSIGNED, emitted);
+
+    await deliveryController.create(req, res);
+
+    unsubscribe();
+
+    expect(emitted).toHaveBeenCalledWith({
+      deliveryId: 'delivery-1',
+      poolId: 'pool-1',
+      assignedBy: 'admin-1',
+    });
   });
 });
 

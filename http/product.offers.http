@@ -1,7 +1,10 @@
 @baseUrl=http://localhost:8000/api/v1/offers
-@productOfferId=6a86e87537758866e94b8ab8
+@productOfferId=REPLACE_WITH_PRODUCT_OFFER_ID
 @supplierToken=REPLACE_WITH_SUPPLIER_ACCESS_TOKEN
 @adminToken=REPLACE_WITH_ADMIN_ACCESS_TOKEN
+
+# See 00-smooth-flow.http for a chained run that creates a real offer/
+# tokens end to end instead of hand-editing the placeholders above.
 
 
 ### create productOffer (SUPPLIER only; user_ref is taken from the token)

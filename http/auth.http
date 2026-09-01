@@ -1,19 +1,22 @@
 
 @baseUrl = http://localhost:8000/api/v1/auth
-@addressIds=["6a731fd174b4f84b4767e2a8", "6a7c2ad3f389f6ed96dc98e5"]
+@addressIds=["REPLACE_WITH_ADDRESS_ID_1", "REPLACE_WITH_ADDRESS_ID_2"]
 
+# addressIds must reference addresses that already exist — create them via
+# addresses.http first (or run 00-smooth-flow.http for a fully chained
+# register -> login -> me -> refresh example with fresh throwaway users).
 
 ### register a new user
 POST {{baseUrl}}/register
 Content-Type: application/json
 
 {
-  "firstName": "retailer15",
-  "lastName": "smith1113",
-  "email": "202311280@gcet.edu.om",
-  "phoneNumber": "1911419027",
-  "companyName": "small retailer",
-  "password": "retailerpassword",
+  "firstName": "Abo",
+  "lastName": "Omar",
+  "email": "abdulazizalgharbi8@gmail.com",
+  "phoneNumber": "91149027",
+  "companyName": "sys admin",
+  "password": "Azaz23456",
   "addresses": {{addressIds}}
 }
 
@@ -23,8 +26,8 @@ POST {{baseUrl}}/login
 Content-Type: application/json
 
 {
-  "email": "mihawk@test.test",
-  "password": "testpassword"
+  "email": "abdulazizalgharbi8@gmail.com",
+  "password": "Azaz23456"
 }
 
 ###

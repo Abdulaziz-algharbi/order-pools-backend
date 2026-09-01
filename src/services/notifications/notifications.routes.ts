@@ -4,25 +4,41 @@ import {
   createNotificationSchema,
   updateNotificationSchema,
 } from './notification.schema';
-import { validate } from '../../middlewares';
+import { validate, tokenMiddleware, requireRole } from '../../middlewares';
 
 const router = Router();
 
 router
   .route('/')
-  .get(notificationController.list.bind(notificationController))
+  .get(
+    tokenMiddleware,
+    requireRole('RETAILER', 'SUPPLIER', 'ADMIN'),
+    notificationController.list.bind(notificationController)
+  )
   .post(
+    tokenMiddleware,
+    requireRole('ADMIN'),
     validate(createNotificationSchema),
     notificationController.create.bind(notificationController)
   );
 
 router
   .route('/:_id')
-  .get(notificationController.getById.bind(notificationController))
+  .get(
+    tokenMiddleware,
+    requireRole('RETAILER', 'SUPPLIER', 'ADMIN'),
+    notificationController.getById.bind(notificationController)
+  )
   .patch(
+    tokenMiddleware,
+    requireRole('RETAILER', 'SUPPLIER', 'ADMIN'),
     validate(updateNotificationSchema),
     notificationController.update.bind(notificationController)
   )
-  .delete(notificationController.delete.bind(notificationController));
+  .delete(
+    tokenMiddleware,
+    requireRole('ADMIN'),
+    notificationController.delete.bind(notificationController)
+  );
 
 export default router;

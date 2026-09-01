@@ -1,16 +1,24 @@
 @baseUrl=http://localhost:8000/api/v1/deliveries
-@deliveryId=6a86e30a1ae6373324cdc94f
-@poolId="6a86e28d5cd9e412c490d787"
-@accessToken=""
+@deliveryId=REPLACE_WITH_DELIVERY_ID
+@poolId=REPLACE_WITH_TARGET_REACHED_POOL_ID
+@accessToken=REPLACE_WITH_ADMIN_ACCESS_TOKEN
+
+# See 00-smooth-flow.http for a chained run that gets a pool to
+# TARGET_REACHED and creates a real delivery end to end — the DELIVERY_
+# ASSIGNED notification only actually reaches anyone if the pool's offer
+# resolves to a real supplier and/or the pool has real participants; an
+# orphaned pool_ref silently notifies nobody (see notifications.http).
 
 ### create delivery (ADMIN only — pool must be TARGET_REACHED/DISTRIBUTING/COMPLETED, one per pool)
+### Also raises the DELIVERY_ASSIGNED business event, which notifies the
+### pool's supplier and every participating retailer — see notifications.http.
 
 POST {{baseUrl}}
 Content-Type: application/json
 Authorization: Bearer {{accessToken}}
 
 {
-    "pool_ref": {{poolId}}
+    "pool_ref": "{{poolId}}"
 }
 
 ### list deliveries (ADMIN sees all; RETAILER sees pools they joined; SUPPLIER sees pools built from their products)
@@ -37,21 +45,3 @@ Authorization: Bearer {{accessToken}}
 
 DELETE {{baseUrl}}/{{deliveryId}}
 Authorization: Bearer {{accessToken}}
-
-# const deliverySchema = new Schema<Delivery>({
-#   pool_ref: {
-#     type: Types.ObjectId,
-#     ref: 'Pool',
-#     required: true,
-#     unique: true,
-#   },
-#   deliveryStatus: {
-#     type: String,
-#     enum: ['PENDING', 'DELIVERING', 'DELIVERED'],
-#     default: 'PENDING',
-#   },
-#   deliveredAt: {
-#     type: Date,
-#     default: 'Not Set',
-#   },
-# });

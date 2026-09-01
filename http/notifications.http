@@ -1,73 +1,70 @@
 @baseUrl=http://localhost:8000/api/v1/notifications
-@notificationId=6a86e0c05cd9e412c490d783
-@senderId="6a71c282ec9d84c27d309e8d"
-@recipientIds=["6a71c58bec7ee9463aeacc40","6a71d328a2dfb1d10baba8fb"]
+@notificationId=REPLACE_WITH_NOTIFICATION_ID
+@adminToken=REPLACE_WITH_ADMIN_ACCESS_TOKEN
+@selfToken=REPLACE_WITH_RETAILER_OR_SUPPLIER_ACCESS_TOKEN
+@recipientId1=REPLACE_WITH_USER_ID_1
+@recipientId2=REPLACE_WITH_USER_ID_2
 
-### create notification
+# Notifications support multiple recipients; read/unread is tracked per
+# recipient inside `recipients[]`, not as one shared flag on the document.
+# DELIVERY_ASSIGNED notifications are also created automatically — see
+# deliveries.http's POST (create delivery), which raises the business
+# event this module listens for. See 00-smooth-flow.http for a chained
+# run that ends with both a supplier and a retailer actually receiving
+# one of these.
+
+### create a notification (ADMIN only; sender_ref is always the caller)
 
 POST {{baseUrl}}
 Content-Type: application/json
+Authorization: Bearer {{adminToken}}
 
 {
-    "sender_ref": {{senderId}},
-    "recipient_ref": {{recipientIds}},
-    "type": "NEW OFFER",
-    "title": "Limon in the track",
-    "message": "It is very quanlity and product detail",
-    "actionUrl": "url to see the product detail"
+    "recipient_ref": ["{{recipientId1}}", "{{recipientId2}}"],
+    "type": "DELIVERY_ASSIGNED",
+    "title": "Heads up",
+    "message": "Manual admin notice.",
+    "actionUrl": "/pools/{{recipientId1}}"
 }
 
-### list notificationes
+### list my notifications (RETAILER/SUPPLIER — scoped to own recipient entry)
 
 GET {{baseUrl}}
+Authorization: Bearer {{selfToken}}
 
-### get notification by id
+### list every notification (ADMIN — unscoped, full recipients[])
+
+GET {{baseUrl}}
+Authorization: Bearer {{adminToken}}
+
+### get a notification by id (RETAILER/SUPPLIER must be a recipient; ADMIN sees any)
 
 GET {{baseUrl}}/{{notificationId}}
+Authorization: Bearer {{selfToken}}
 
-### delete notification
+### mark my own notification read (RETAILER/SUPPLIER — only touches their
+### own recipients[] entry; readAt is set automatically)
+
+PATCH {{baseUrl}}/{{notificationId}}
+Content-Type: application/json
+Authorization: Bearer {{selfToken}}
+
+{
+    "isRead": true
+}
+
+### edit a notification's content (ADMIN only)
+
+PATCH {{baseUrl}}/{{notificationId}}
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+    "title": "Updated title",
+    "priority": "HIGH"
+}
+
+### delete a notification (ADMIN only)
 
 DELETE {{baseUrl}}/{{notificationId}}
-
-# const notificationSchema = new Schema<Notification>({
-#   sender_ref: {
-#     type: Types.ObjectId,
-#     ref: 'User',
-#     default: null,
-#     required: true,
-#   },
-#   recipient_ref: {
-#     type: [Types.ObjectId],
-#     ref: 'User',
-#     required: true,
-#   },
-#   type: {
-#     type: String,
-#     enum: ['PRODUCT_APPROVED', 'NEW OFFER', 'NEW COMPLAINT'],
-#   },
-#   title: {
-#     type: String,
-#     maxLength: 255,
-#     required: true,
-#   },
-#   message: {
-#     type: String,
-#     maxLength: 2000,
-#     required: true,
-#   },
-#   actionUrl: {
-#     type: String,
-#   },
-#   priority: {
-#     type: String,
-#     enum: ['LOW', 'NORMAL', 'HIGH'],
-#     default: 'NORMAL',
-#   },
-#   isRead: {
-#     type: Boolean,
-#     default: false,
-#   },
-#   readAt: {
-#     type: Date,
-#   },
-# });
+Authorization: Bearer {{adminToken}}

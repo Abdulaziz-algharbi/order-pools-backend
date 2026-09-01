@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import ERRORS from '../../constants/ERRORS';
+import EVENTS from '../../constants/EVENTS';
 import BaseController from '../base/base.controller';
 import poolParticipantModel from '../pool.participants/pool.participant.model';
 import poolModel from '../pools/pool.model';
@@ -20,6 +21,10 @@ class DeliveryController extends BaseController {
   // Only an admin creates a delivery (enforced by requireRole on the route),
   // and only once its pool has reached target. A pool gets at most one
   // delivery — enforced here and by the model's unique index on pool_ref.
+  // Written directly (rather than delegating to BaseController.create)
+  // since the saved doc's id is needed to raise the DeliveryAssigned
+  // business event — see notifications.controller.ts, which is the only
+  // place that event turns into actual notifications.
   async create(req: Request, res: Response): Promise<void> {
     try {
       const pool = await poolModel.findById(req.body.pool_ref);
@@ -44,7 +49,17 @@ class DeliveryController extends BaseController {
         return;
       }
 
-      await super.create(req, res);
+      const newDoc = new this.model(req.body);
+      const savedDoc = await newDoc.save();
+      this.logger.info(`${this.model.modelName} created`);
+
+      this.broker.emit(EVENTS.DELIVERY_ASSIGNED, {
+        deliveryId: savedDoc._id.toString(),
+        poolId: pool._id.toString(),
+        assignedBy: req.meta.user?.userId ?? null,
+      });
+
+      res.status(201).send(savedDoc);
     } catch (error) {
       this.errorHandler(error, req, res);
     }

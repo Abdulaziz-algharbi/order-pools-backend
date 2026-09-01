@@ -1,7 +1,11 @@
 @baseUrl=http://localhost:8000/api/v1/complaints
-@complaintId=6a86e34c1ae6373324cdc951
-@poolId="6a86e30a1ae6373324cdc94f"
-@accessToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2YTcxYzU4YmVjN2VlOTQ2M2FlYWNjNDAiLCJyb2xlIjoiQURNSU4iLCJpYXQiOjE3ODgwNzQ1NzYsImV4cCI6MTc4ODA3ODE3Nn0.oP71agPnc5ewwm9ATOBj0slT3rdpe4aYyUuvZWepXyc
+@complaintId=REPLACE_WITH_COMPLAINT_ID
+@poolId=REPLACE_WITH_POOL_ID
+@accessToken=REPLACE_WITH_RETAILER_OR_SUPPLIER_ACCESS_TOKEN
+@adminAccessToken=REPLACE_WITH_ADMIN_ACCESS_TOKEN
+
+# See 00-smooth-flow.http for a chained run that creates a real pool/token
+# end to end instead of hand-editing the placeholders above.
 
 ### create complaint (RETAILER or SUPPLIER only — creator_ref is derived from the token, not sent; ADMIN gets 403)
 
@@ -10,10 +14,9 @@ Content-Type: application/json
 Authorization: Bearer {{accessToken}}
 
 {
-    "pool_ref": {{poolId}},
+    "pool_ref": "{{poolId}}",
     "title": "not the agreed number anothor retailer",
     "description": "I bought 20 pieces, but I got 25"
-
 }
 
 ### list complaintes
@@ -41,7 +44,7 @@ Authorization: Bearer {{accessToken}}
 
 PATCH {{baseUrl}}/{{complaintId}}
 Content-Type: application/json
-Authorization: Bearer {{accessToken}}
+Authorization: Bearer {{adminAccessToken}}
 
 {
     "status": "RESOLVED",
@@ -51,26 +54,4 @@ Authorization: Bearer {{accessToken}}
 ### delete complaint (ADMIN only)
 
 DELETE {{baseUrl}}/{{complaintId}}
-Authorization: Bearer {{accessToken}}
-
-# const complaintSchema = new Schema<Complaint>({
-#   creator_ref: {
-#     type: Types.ObjectId,
-#     ref: 'User',
-#     required: true,
-#   },
-#   pool_ref: {
-#     type: Types.ObjectId,
-#     ref: 'Pool',
-#     required: true,
-#   },
-#   title: {
-#     type: String,
-#     maxLength: 255,
-#     required: true
-#   },
-#   description: {
-#     type: String,
-#     maxLength: 2000,
-#     required: true
-# });
+Authorization: Bearer {{adminAccessToken}}
