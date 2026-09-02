@@ -190,7 +190,11 @@ Authorization: Bearer {{adminToken}}
   "adminComment": "Looks good"
 }
 
-### 11. Admin opens a pool for the approved offer
+### 11. Admin opens a pool for the approved offer.
+###     Pool.currentQuantity is the quantity still available to be claimed —
+###     it starts here at the amount the pool needs to fill and counts down
+###     as participants join, so it's set to 10 (== minimumContribution) to
+###     let the single retailer below claim the whole pool in one join.
 
 # @name createPool
 POST {{root}}/pools
@@ -199,7 +203,7 @@ Authorization: Bearer {{adminToken}}
 
 {
   "productoffer_ref": "{{offerId}}",
-  "currentQuantity": 0,
+  "currentQuantity": 10,
   "minimumContribution": 10,
   "pricePerUnit": 5,
   "endDate": "2026-12-31T23:59:00Z"
@@ -236,7 +240,11 @@ Content-Type: application/json
 
 @paymentId = {{createPayment.response.body._id}}
 
-### 14. Retailer joins the pool
+### 14. Retailer joins the pool, claiming the whole remaining quantity (10).
+###     PoolParticipantController.create atomically decrements
+###     Pool.currentQuantity by the joined quantity and, since that leaves
+###     exactly 0, flips Pool.status straight to TARGET_REACHED — no manual
+###     admin step needed for either.
 
 # @name joinPool
 POST {{root}}/participants
@@ -250,22 +258,7 @@ Authorization: Bearer {{retailerToken}}
   "quantity": 10
 }
 
-### 15. Admin marks the pool as having reached its target.
-###     Nothing today aggregates participants' quantities onto
-###     Pool.currentQuantity/status automatically (see CLAUDE.md — no
-###     transactional/aggregation logic exists yet) — an admin sets this
-###     by hand, same as a real admin would from the ops dashboard.
-
-PATCH {{root}}/pools/{{poolId}}
-Content-Type: application/json
-Authorization: Bearer {{adminToken}}
-
-{
-  "currentQuantity": 10,
-  "status": "TARGET_REACHED"
-}
-
-### 16. Admin assigns the delivery — raises DELIVERY_ASSIGNED, which notifies
+### 15. Admin assigns the delivery — raises DELIVERY_ASSIGNED, which notifies
 ###     the offer's supplier and every participant of this pool
 
 # @name createDelivery
@@ -281,12 +274,12 @@ Authorization: Bearer {{adminToken}}
 
 @deliveryId = {{createDelivery.response.body._id}}
 
-### 17. Confirm the supplier got notified ("Delivery assigned")
+### 16. Confirm the supplier got notified ("Delivery assigned")
 
 GET {{root}}/notifications
 Authorization: Bearer {{supplierToken}}
 
-### 18. Confirm the retailer got notified ("Your delivery is on its way")
+### 17. Confirm the retailer got notified ("Your delivery is on its way")
 
 GET {{root}}/notifications
 Authorization: Bearer {{retailerToken}}
