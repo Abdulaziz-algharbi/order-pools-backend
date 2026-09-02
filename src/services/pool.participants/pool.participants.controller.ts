@@ -27,7 +27,7 @@ class PoolParticipantController extends BaseController {
       }
 
       req.body.user_ref = caller.userId;
-      const { user_ref, address_ref } = req.body;
+      const { user_ref, address_ref, pool_ref, quantity } = req.body;
 
       const user = await userModel.findById(user_ref);
       if (!user) {
@@ -45,7 +45,119 @@ class PoolParticipantController extends BaseController {
         return;
       }
 
-      await super.create(req, res);
+      const pool = await poolModel.findById(pool_ref);
+      if (!pool) {
+        res.status(404).send({ message: 'Pool not found' });
+        return;
+      }
+
+      if (pool.status !== 'OPEN') {
+        res.status(409).send({
+          message: 'Pool is not open for participation',
+        });
+        return;
+      }
+
+      // Pool.currentQuantity is the quantity still available to be claimed
+      // (it starts at the offer's whole quantity and counts down as
+      // participants join, hitting 0 once the pool is full). A join must
+      // claim at least minimumContribution, can never claim more than what
+      // is left, and can never leave a "remainder" behind that is smaller
+      // than minimumContribution (since no future participant could ever
+      // claim it) — unless it takes the remaining quantity in full, leaving
+      // exactly 0. Re-validated with a fresh read so the client can get a
+      // precise reason before the atomic, concurrency-safe check below.
+      if (quantity < pool.minimumContribution) {
+        res.status(400).send({
+          message: `quantity must be at least the pool's minimum contribution (${pool.minimumContribution})`,
+        });
+        return;
+      }
+
+      if (quantity > pool.currentQuantity) {
+        res.status(400).send({
+          message: `quantity cannot exceed the pool's remaining quantity (${pool.currentQuantity})`,
+        });
+        return;
+      }
+
+      const remainingAfter = pool.currentQuantity - quantity;
+      if (remainingAfter !== 0 && remainingAfter < pool.minimumContribution) {
+        res.status(400).send({
+          message: `quantity would leave ${remainingAfter} remaining, which is less than the minimum contribution (${pool.minimumContribution}) — take between ${pool.minimumContribution} and ${pool.currentQuantity - pool.minimumContribution}, or take all ${pool.currentQuantity}`,
+        });
+        return;
+      }
+
+      // Re-checked atomically against the pool's live state (not the
+      // `pool` read above, which can already be stale under concurrent
+      // joins) so two simultaneous requests can never both succeed past
+      // the bound and overshoot/undershoot Pool.currentQuantity. Uses an
+      // update pipeline (rather than a plain $inc) so hitting exactly 0
+      // flips status to TARGET_REACHED in the same atomic operation.
+      const claimedPool = await poolModel.findOneAndUpdate(
+        {
+          _id: pool_ref,
+          status: 'OPEN',
+          $expr: {
+            $and: [
+              { $gte: [quantity, '$minimumContribution'] },
+              { $lte: [quantity, '$currentQuantity'] },
+              {
+                $or: [
+                  { $eq: [{ $subtract: ['$currentQuantity', quantity] }, 0] },
+                  {
+                    $gte: [
+                      { $subtract: ['$currentQuantity', quantity] },
+                      '$minimumContribution',
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        [
+          {
+            $set: {
+              currentQuantity: { $subtract: ['$currentQuantity', quantity] },
+              status: {
+                $cond: [
+                  { $eq: [{ $subtract: ['$currentQuantity', quantity] }, 0] },
+                  'TARGET_REACHED',
+                  '$status',
+                ],
+              },
+            },
+          },
+        ]
+      );
+
+      if (!claimedPool) {
+        res.status(409).send({
+          message:
+            'Pool quantity changed before this request completed — please retry',
+        });
+        return;
+      }
+
+      try {
+        const participant = new this.model(req.body);
+        const saved = await participant.save();
+        this.logger.info(`${this.model.modelName} created`);
+        res.status(201).send(saved);
+      } catch (participantError) {
+        // Roll back the reservation made above since no participant was
+        // actually created to consume it — including the TARGET_REACHED
+        // flip, if this join was the one that emptied the pool.
+        await poolModel.updateOne(
+          { _id: pool_ref },
+          remainingAfter === 0
+            ? { $inc: { currentQuantity: quantity }, $set: { status: 'OPEN' } }
+            : { $inc: { currentQuantity: quantity } }
+        );
+        throw participantError;
+      }
     } catch (error) {
       this.errorHandler(error, req, res);
     }

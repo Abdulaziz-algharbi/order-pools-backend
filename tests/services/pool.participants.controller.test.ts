@@ -1,23 +1,35 @@
 import { Request, Response } from 'express';
 
+const mockParticipantSave = jest.fn();
+
 jest.mock('../../src/services/pool.participants/pool.participant.model', () => {
   const actual = jest.requireActual(
     '../../src/services/pool.participants/pool.participant.model'
   );
+  const MockModel: any = jest.fn().mockImplementation(function (
+    this: any,
+    data: any
+  ) {
+    Object.assign(this, data);
+    this.save = mockParticipantSave;
+  });
+  MockModel.modelName = 'PoolParticipant';
+  MockModel.find = jest.fn();
+  MockModel.findById = jest.fn();
   return {
     __esModule: true,
-    default: {
-      modelName: 'PoolParticipant',
-      find: jest.fn(),
-      findById: jest.fn(),
-    },
+    default: MockModel,
     couldBeUpdated: actual.couldBeUpdated,
   };
 });
 
 jest.mock('../../src/services/pools/pool.model', () => ({
   __esModule: true,
-  default: { findById: jest.fn() },
+  default: {
+    findById: jest.fn(),
+    findOneAndUpdate: jest.fn(),
+    updateOne: jest.fn(),
+  },
 }));
 
 jest.mock('../../src/services/users/user.model', () => ({
@@ -34,6 +46,9 @@ import userModel from '../../src/services/users/user.model';
 const mockFind = poolParticipantModel.find as unknown as jest.Mock;
 const mockFindById = poolParticipantModel.findById as unknown as jest.Mock;
 const mockPoolFindById = poolModel.findById as unknown as jest.Mock;
+const mockPoolFindOneAndUpdate =
+  poolModel.findOneAndUpdate as unknown as jest.Mock;
+const mockPoolUpdateOne = poolModel.updateOne as unknown as jest.Mock;
 const mockUserFindById = userModel.findById as unknown as jest.Mock;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -46,6 +61,34 @@ function mockRes() {
 }
 
 describe('PoolParticipantController.create', () => {
+  // A pool that comfortably allows a join of 20 (leaves 30 remaining, which
+  // is >= minimumContribution) unless a specific test overrides a field.
+  function basePool(overrides: Record<string, unknown> = {}) {
+    return {
+      status: 'OPEN',
+      currentQuantity: 50,
+      minimumContribution: 15,
+      ...overrides,
+    };
+  }
+
+  function baseReq(body: Record<string, unknown> = {}) {
+    return {
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
+      body: {
+        address_ref: 'addr-1',
+        pool_ref: 'pool-1',
+        payment_ref: 'payment-1',
+        quantity: 20,
+        ...body,
+      },
+    } as unknown as Request;
+  }
+
+  beforeEach(() => {
+    mockUserFindById.mockResolvedValue({ addresses: ['addr-1'] });
+  });
+
   it('returns 401 when there is no authenticated user', async () => {
     const req = { meta: {}, body: {} } as Request;
     const res = mockRes();
@@ -56,31 +99,9 @@ describe('PoolParticipantController.create', () => {
     expect(mockUserFindById).not.toHaveBeenCalled();
   });
 
-  it('overrides user_ref to the caller, ignoring any client-supplied value', async () => {
-    mockUserFindById.mockResolvedValue({ addresses: ['addr-1'] });
-    const superCreate = jest
-      .spyOn(BaseController.prototype, 'create')
-      .mockResolvedValue(undefined);
-    const req = {
-      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
-      body: { user_ref: 'someone-else', address_ref: 'addr-1' },
-    } as unknown as Request;
-    const res = mockRes();
-
-    await poolParticipantController.create(req, res);
-
-    expect(mockUserFindById).toHaveBeenCalledWith('retailer-1');
-    expect(req.body.user_ref).toBe('retailer-1');
-    expect(superCreate).toHaveBeenCalledWith(req, res);
-    superCreate.mockRestore();
-  });
-
   it('returns 404 when the authenticated user cannot be found', async () => {
     mockUserFindById.mockResolvedValue(null);
-    const req = {
-      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
-      body: { address_ref: 'addr-1' },
-    } as unknown as Request;
+    const req = baseReq();
     const res = mockRes();
 
     await poolParticipantController.create(req, res);
@@ -90,15 +111,181 @@ describe('PoolParticipantController.create', () => {
 
   it("returns 400 when address_ref is not one of the caller's own addresses", async () => {
     mockUserFindById.mockResolvedValue({ addresses: ['addr-1'] });
-    const req = {
-      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
-      body: { address_ref: 'addr-2' },
-    } as unknown as Request;
+    const req = baseReq({ address_ref: 'addr-2' });
     const res = mockRes();
 
     await poolParticipantController.create(req, res);
 
     expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockPoolFindById).not.toHaveBeenCalled();
+  });
+
+  it('overrides user_ref to the caller, ignoring any client-supplied value', async () => {
+    mockPoolFindById.mockResolvedValue(basePool());
+    mockPoolFindOneAndUpdate.mockResolvedValue(
+      basePool({ currentQuantity: 30 })
+    );
+    mockParticipantSave.mockResolvedValue({ _id: 'p-1' });
+    const req = baseReq({ user_ref: 'someone-else' });
+    const res = mockRes();
+
+    await poolParticipantController.create(req, res);
+
+    expect(mockUserFindById).toHaveBeenCalledWith('retailer-1');
+    expect(req.body.user_ref).toBe('retailer-1');
+    expect(res.status).toHaveBeenCalledWith(201);
+  });
+
+  it('returns 404 when the pool cannot be found', async () => {
+    mockPoolFindById.mockResolvedValue(null);
+    const req = baseReq();
+    const res = mockRes();
+
+    await poolParticipantController.create(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(mockPoolFindOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it('returns 409 when the pool is not OPEN', async () => {
+    mockPoolFindById.mockResolvedValue(basePool({ status: 'TARGET_REACHED' }));
+    const req = baseReq();
+    const res = mockRes();
+
+    await poolParticipantController.create(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(mockPoolFindOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when quantity is below minimumContribution', async () => {
+    mockPoolFindById.mockResolvedValue(basePool());
+    const req = baseReq({ quantity: 14 });
+    const res = mockRes();
+
+    await poolParticipantController.create(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockPoolFindOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when quantity exceeds the remaining currentQuantity', async () => {
+    mockPoolFindById.mockResolvedValue(basePool());
+    const req = baseReq({ quantity: 51 });
+    const res = mockRes();
+
+    await poolParticipantController.create(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockPoolFindOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when the leftover would be a nonzero remainder below minimumContribution', async () => {
+    // currentQuantity 50, minimumContribution 15 -> taking 36..49 leaves 1..14
+    mockPoolFindById.mockResolvedValue(basePool());
+    const req = baseReq({ quantity: 40 });
+    const res = mockRes();
+
+    await poolParticipantController.create(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockPoolFindOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it('allows taking exactly minimumContribution (lower bound)', async () => {
+    mockPoolFindById.mockResolvedValue(basePool());
+    mockPoolFindOneAndUpdate.mockResolvedValue(
+      basePool({ currentQuantity: 35 })
+    );
+    mockParticipantSave.mockResolvedValue({ _id: 'p-1' });
+    const req = baseReq({ quantity: 15 });
+    const res = mockRes();
+
+    await poolParticipantController.create(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(201);
+  });
+
+  it('allows taking the full remaining quantity, leaving exactly 0, and flips status to TARGET_REACHED', async () => {
+    mockPoolFindById.mockResolvedValue(basePool());
+    mockPoolFindOneAndUpdate.mockResolvedValue(
+      basePool({ currentQuantity: 0, status: 'TARGET_REACHED' })
+    );
+    mockParticipantSave.mockResolvedValue({ _id: 'p-1' });
+    const req = baseReq({ quantity: 50 });
+    const res = mockRes();
+
+    await poolParticipantController.create(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(201);
+    const [, pipeline] = mockPoolFindOneAndUpdate.mock.calls[0];
+    const stage = pipeline[0].$set;
+    expect(stage.status.$cond[1]).toBe('TARGET_REACHED');
+  });
+
+  it('does not flip status when the pool still has quantity remaining', async () => {
+    mockPoolFindById.mockResolvedValue(basePool());
+    mockPoolFindOneAndUpdate.mockResolvedValue(
+      basePool({ currentQuantity: 30 })
+    );
+    mockParticipantSave.mockResolvedValue({ _id: 'p-1' });
+    const req = baseReq({ quantity: 20 });
+    const res = mockRes();
+
+    await poolParticipantController.create(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(201);
+    const [, pipeline] = mockPoolFindOneAndUpdate.mock.calls[0];
+    const stage = pipeline[0].$set;
+    expect(stage.status.$cond[2]).toBe('$status');
+  });
+
+  it('returns 409 when the atomic pool update loses a concurrency race', async () => {
+    mockPoolFindById.mockResolvedValue(basePool());
+    mockPoolFindOneAndUpdate.mockResolvedValue(null);
+    const req = baseReq({ quantity: 20 });
+    const res = mockRes();
+
+    await poolParticipantController.create(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(mockParticipantSave).not.toHaveBeenCalled();
+  });
+
+  it('rolls back the pool reservation when saving the participant fails', async () => {
+    mockPoolFindById.mockResolvedValue(basePool());
+    mockPoolFindOneAndUpdate.mockResolvedValue(
+      basePool({ currentQuantity: 30 })
+    );
+    mockParticipantSave.mockRejectedValue(new Error('boom'));
+    const req = baseReq({ quantity: 20 });
+    const res = mockRes();
+
+    await poolParticipantController.create(req, res);
+
+    expect(mockPoolUpdateOne).toHaveBeenCalledWith(
+      { _id: 'pool-1' },
+      { $inc: { currentQuantity: 20 } }
+    );
+    expect(res.status).toHaveBeenCalledWith(500);
+  });
+
+  it('rolls back both the reservation and the TARGET_REACHED flip when saving fails on a pool-emptying join', async () => {
+    mockPoolFindById.mockResolvedValue(basePool());
+    mockPoolFindOneAndUpdate.mockResolvedValue(
+      basePool({ currentQuantity: 0, status: 'TARGET_REACHED' })
+    );
+    mockParticipantSave.mockRejectedValue(new Error('boom'));
+    const req = baseReq({ quantity: 50 });
+    const res = mockRes();
+
+    await poolParticipantController.create(req, res);
+
+    expect(mockPoolUpdateOne).toHaveBeenCalledWith(
+      { _id: 'pool-1' },
+      { $inc: { currentQuantity: 50 }, $set: { status: 'OPEN' } }
+    );
+    expect(res.status).toHaveBeenCalledWith(500);
   });
 });
 
