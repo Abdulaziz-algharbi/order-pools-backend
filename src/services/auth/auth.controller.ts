@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import BaseController from '../base/base.controller';
 import AuthModel from './auth.model';
+import supplierRemoveRequestModel from '../supplier.remove.requests/supplier.remove.request.model';
 
 class AuthController extends BaseController {
   constructor() {
@@ -128,11 +129,107 @@ class AuthController extends BaseController {
 
       const { _id, roles } = decoded as jwt.JwtPayload;
 
+      // Beyond the signature/expiry check above, the token must still
+      // match what's on file for this user — logging out (or logging in
+      // elsewhere, which rotates it) clears/overwrites this record, so an
+      // old refresh token stops working immediately instead of staying
+      // valid for its full remaining lifetime.
+      const authRecord = await this.model.findOne({
+        userId: _id,
+        refreshToken,
+      });
+      if (!authRecord) {
+        res.status(401).send({
+          message: 'Refresh token has been revoked, please log in again',
+        });
+        return;
+      }
+
       const accessToken = this.jwt.createAccessToken({ _id, roles });
 
       res.status(200).send({
         accessToken,
       });
+    } catch (error) {
+      this.errorHandler(error, req, res);
+    }
+  }
+
+  // Any authenticated role. Clears the persisted refresh token so
+  // /auth/refresh (see above) rejects it immediately — the caller's
+  // current access token still works until it naturally expires (there's
+  // no access-token revocation/blacklist in this codebase), but no new one
+  // can be minted without logging in again.
+  async logout(req: Request, res: Response) {
+    try {
+      const user = req.meta.user;
+      if (!user) {
+        res.status(401).send({ message: 'Access token is missing' });
+        return;
+      }
+
+      await this.model.updateOne(
+        { userId: user.userId },
+        { $set: { refreshToken: '' } }
+      );
+
+      this.logger.info(`User logged out: ${user.userId}`);
+      res.status(200).send({ message: 'Logged out successfully' });
+    } catch (error) {
+      this.errorHandler(error, req, res);
+    }
+  }
+
+  // Any authenticated role. A caller who only holds RETAILER is removed
+  // immediately. A caller who holds SUPPLIER (whether or not they also
+  // hold RETAILER) can't self-delete outright — a SUPPLIER may have open
+  // pools/payouts an admin needs to account for — so this instead opens a
+  // SupplierRemoveRequest for admin review; the account is only actually
+  // deleted once that request is APPROVED (see
+  // supplier.remove.requests.controller.ts).
+  async remove(req: Request, res: Response) {
+    try {
+      const user = req.meta.user;
+      if (!user) {
+        res.status(401).send({ message: 'Access token is missing' });
+        return;
+      }
+
+      const { reason } = req.body;
+
+      if (user.roles.includes('SUPPLIER')) {
+        const existing = await supplierRemoveRequestModel.findOne({
+          user_ref: user.userId,
+          status: 'PENDING',
+        });
+        if (existing) {
+          res.status(409).send({ message: this.ERRORS.CONFLICT });
+          return;
+        }
+
+        const doc = new supplierRemoveRequestModel({
+          user_ref: user.userId,
+          reason,
+        });
+        const saved = await doc.save();
+
+        this.logger.info(
+          `SupplierRemoveRequest created for user: ${user.userId}`
+        );
+        res.status(201).send({
+          message:
+            'Your account removal request has been submitted for admin approval',
+          data: saved,
+        });
+        return;
+      }
+
+      const userModel = this.registry.get(this.REGISTRY.USER_MODEL);
+      await userModel.deleteOne({ _id: user.userId });
+      await this.model.deleteOne({ userId: user.userId });
+
+      this.logger.info(`User removed: ${user.userId}, reason: ${reason}`);
+      res.status(200).send({ message: 'Account removed successfully' });
     } catch (error) {
       this.errorHandler(error, req, res);
     }

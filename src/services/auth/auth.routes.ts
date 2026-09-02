@@ -2,7 +2,7 @@ import { Router } from 'express';
 
 import authController from './auth.controller';
 import { tokenMiddleware, validate } from '../../middlewares';
-import { registerSchema } from './auth.schema';
+import { registerSchema, removeAccountSchema } from './auth.schema';
 
 const router = Router();
 
@@ -14,6 +14,17 @@ router.post(
 router.post('/login', authController.login.bind(authController));
 router.post('/refresh', authController.refresh.bind(authController));
 router.get('/me', tokenMiddleware, authController.me.bind(authController));
+router.post(
+  '/logout',
+  tokenMiddleware,
+  authController.logout.bind(authController)
+);
+router.delete(
+  '/remove',
+  tokenMiddleware,
+  validate(removeAccountSchema),
+  authController.remove.bind(authController)
+);
 router.get('/verify/:token', authController.verify.bind(authController));
 
 export default router;

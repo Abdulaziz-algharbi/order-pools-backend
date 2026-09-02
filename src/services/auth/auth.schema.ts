@@ -19,3 +19,14 @@ export const registerSchema = z
   .strict();
 
 export type RegisterSchema = z.infer<typeof registerSchema>;
+
+// DELETE /auth/remove — reason is required so there's a record of why the
+// account was removed (or why the SUPPLIER removal request was filed)
+// before it happens. See AuthController.remove.
+export const removeAccountSchema = z
+  .object({
+    reason: z.string().trim().min(1).max(1000),
+  })
+  .strict();
+
+export type RemoveAccountSchema = z.infer<typeof removeAccountSchema>;

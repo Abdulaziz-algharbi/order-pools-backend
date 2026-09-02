@@ -1,0 +1,57 @@
+@baseUrl=http://localhost:8000/api/v1/supplier-remove-requests
+@requestId=REPLACE_WITH_SUPPLIER_REMOVE_REQUEST_ID
+@supplierToken=REPLACE_WITH_SUPPLIER_ACCESS_TOKEN
+@adminToken=REPLACE_WITH_ADMIN_ACCESS_TOKEN
+
+# There is no POST route here — a request is only ever created as a side
+# effect of DELETE /auth/remove (see auth.http) when the caller holds
+# SUPPLIER. This file only covers viewing and admin review of a request
+# already created that way.
+
+### list my own removal request(s) (the requesting SUPPLIER)
+
+GET {{baseUrl}}
+Authorization: Bearer {{supplierToken}}
+
+### list every removal request (ADMIN)
+
+GET {{baseUrl}}
+Authorization: Bearer {{adminToken}}
+
+### get a specific request (owning caller, or ADMIN for any)
+
+GET {{baseUrl}}/{{requestId}}
+Authorization: Bearer {{supplierToken}}
+
+### approve a request (ADMIN only — deletes the requester's User and Auth
+### records outright)
+
+PATCH {{baseUrl}}/{{requestId}}
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "status": "APPROVED",
+  "adminComment": "Outstanding payouts settled, no open pools"
+}
+
+### reject a request (ADMIN only)
+
+PATCH {{baseUrl}}/{{requestId}}
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "status": "REJECTED",
+  "adminComment": "Has an open pool still DISTRIBUTING"
+}
+
+### withdraw my own request while it's still PENDING (the requesting SUPPLIER)
+
+DELETE {{baseUrl}}/{{requestId}}
+Authorization: Bearer {{supplierToken}}
+
+### delete any request regardless of status (ADMIN)
+
+DELETE {{baseUrl}}/{{requestId}}
+Authorization: Bearer {{adminToken}}

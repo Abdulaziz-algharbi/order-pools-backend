@@ -13,11 +13,33 @@ jest.mock('../../src/services/auth/auth.model', () => {
   });
   MockAuthModel.modelName = 'Auth';
   MockAuthModel.findOneAndUpdate = jest.fn();
+  MockAuthModel.findOne = jest.fn();
+  MockAuthModel.updateOne = jest.fn();
+  MockAuthModel.deleteOne = jest.fn();
   return { __esModule: true, default: MockAuthModel };
 });
 
+const mockSupplierRemoveRequestSave = jest.fn();
+
+jest.mock(
+  '../../src/services/supplier.remove.requests/supplier.remove.request.model',
+  () => {
+    const MockModel: any = jest.fn().mockImplementation(function (
+      this: any,
+      data: any
+    ) {
+      Object.assign(this, data);
+      this.save = mockSupplierRemoveRequestSave;
+    });
+    MockModel.modelName = 'SupplierRemoveRequest';
+    MockModel.findOne = jest.fn();
+    return { __esModule: true, default: MockModel };
+  }
+);
+
 import authController from '../../src/services/auth/auth.controller';
 import authModel from '../../src/services/auth/auth.model';
+import supplierRemoveRequestModel from '../../src/services/supplier.remove.requests/supplier.remove.request.model';
 import appRegistry from '../../src/app.registry';
 import appBroker from '../../src/app.broker';
 import REGISTRY from '../../src/constants/REGISTRY';
@@ -26,6 +48,11 @@ import ERRORS from '../../src/constants/ERRORS';
 
 const mockAuthFindOneAndUpdate =
   authModel.findOneAndUpdate as unknown as jest.Mock;
+const mockAuthFindOne = authModel.findOne as unknown as jest.Mock;
+const mockAuthUpdateOne = authModel.updateOne as unknown as jest.Mock;
+const mockAuthDeleteOne = authModel.deleteOne as unknown as jest.Mock;
+const mockSupplierRemoveRequestFindOne =
+  supplierRemoveRequestModel.findOne as unknown as jest.Mock;
 
 // A minimal thenable mock for chained Mongoose queries (findById().select()).
 function mockQuery(result: unknown) {
@@ -51,6 +78,7 @@ function makeUserModel() {
   MockUserModel.modelName = 'User';
   MockUserModel.findOne = jest.fn();
   MockUserModel.findById = jest.fn();
+  MockUserModel.deleteOne = jest.fn();
   return MockUserModel;
 }
 
@@ -299,7 +327,29 @@ describe('AuthController.refresh', () => {
     });
   });
 
+  it('returns 401 when the refresh token is not the one on file (revoked by logout/re-login)', async () => {
+    mockAuthFindOne.mockResolvedValue(null);
+    const refreshToken = jwtUtil.createRefreshToken({
+      _id: 'user-1',
+      roles: ['SUPPLIER'],
+    });
+    const req = { body: { refreshToken } } as Request;
+    const res = mockRes();
+
+    await authController.refresh(req, res);
+
+    expect(mockAuthFindOne).toHaveBeenCalledWith({
+      userId: 'user-1',
+      refreshToken,
+    });
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.send).toHaveBeenCalledWith({
+      message: 'Refresh token has been revoked, please log in again',
+    });
+  });
+
   it('issues a fresh access token carrying the same roles', async () => {
+    mockAuthFindOne.mockResolvedValue({ userId: 'user-1' });
     const refreshToken = jwtUtil.createRefreshToken({
       _id: 'user-1',
       roles: ['SUPPLIER'],
@@ -314,6 +364,99 @@ describe('AuthController.refresh', () => {
     const decoded = jwtUtil.verifyAccessToken(sentBody.accessToken) as any;
     expect(decoded._id).toBe('user-1');
     expect(decoded.roles).toEqual(['SUPPLIER']);
+  });
+});
+
+describe('AuthController.logout', () => {
+  it('returns 401 when there is no authenticated user', async () => {
+    const req = { meta: {} } as Request;
+    const res = mockRes();
+
+    await authController.logout(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(mockAuthUpdateOne).not.toHaveBeenCalled();
+  });
+
+  it("clears the caller's persisted refresh token", async () => {
+    mockAuthUpdateOne.mockResolvedValue({});
+    const req = {
+      meta: { user: { userId: 'user-1', roles: ['RETAILER'] } },
+    } as unknown as Request;
+    const res = mockRes();
+
+    await authController.logout(req, res);
+
+    expect(mockAuthUpdateOne).toHaveBeenCalledWith(
+      { userId: 'user-1' },
+      { $set: { refreshToken: '' } }
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+});
+
+describe('AuthController.remove', () => {
+  it('returns 401 when there is no authenticated user', async () => {
+    const req = { meta: {}, body: {} } as Request;
+    const res = mockRes();
+
+    await authController.remove(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(mockUserModel.deleteOne).not.toHaveBeenCalled();
+  });
+
+  it('deletes the user and auth record immediately for a RETAILER-only caller', async () => {
+    mockUserModel.deleteOne.mockResolvedValue({});
+    mockAuthDeleteOne.mockResolvedValue({});
+    const req = {
+      meta: { user: { userId: 'user-1', roles: ['RETAILER'] } },
+      body: { reason: 'No longer need this account' },
+    } as unknown as Request;
+    const res = mockRes();
+
+    await authController.remove(req, res);
+
+    expect(mockUserModel.deleteOne).toHaveBeenCalledWith({ _id: 'user-1' });
+    expect(mockAuthDeleteOne).toHaveBeenCalledWith({ userId: 'user-1' });
+    expect(mockSupplierRemoveRequestSave).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('opens a SupplierRemoveRequest instead of deleting when the caller holds SUPPLIER', async () => {
+    mockSupplierRemoveRequestFindOne.mockResolvedValue(null);
+    mockSupplierRemoveRequestSave.mockResolvedValue({ _id: 'req-1' });
+    const req = {
+      meta: { user: { userId: 'user-1', roles: ['RETAILER', 'SUPPLIER'] } },
+      body: { reason: 'Closing my wholesale business' },
+    } as unknown as Request;
+    const res = mockRes();
+
+    await authController.remove(req, res);
+
+    expect(supplierRemoveRequestModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        user_ref: 'user-1',
+        reason: 'Closing my wholesale business',
+      })
+    );
+    expect(mockUserModel.deleteOne).not.toHaveBeenCalled();
+    expect(mockAuthDeleteOne).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(201);
+  });
+
+  it('returns 409 when a SUPPLIER already has a PENDING removal request', async () => {
+    mockSupplierRemoveRequestFindOne.mockResolvedValue({ _id: 'req-1' });
+    const req = {
+      meta: { user: { userId: 'user-1', roles: ['SUPPLIER'] } },
+      body: { reason: 'Closing my wholesale business' },
+    } as unknown as Request;
+    const res = mockRes();
+
+    await authController.remove(req, res);
+
+    expect(mockSupplierRemoveRequestSave).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(409);
   });
 });
 

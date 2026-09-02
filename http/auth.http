@@ -47,3 +47,23 @@ Content-Type: application/json
 {
   "refreshToken": "{{refreshToken}}"
 }
+
+### logout (any authenticated role) — revokes the refresh token above, so
+### the next /refresh call with it will 401; the current accessToken keeps
+### working until it naturally expires (no access-token blacklist exists)
+
+POST {{baseUrl}}/logout
+Authorization: Bearer {{accessToken}}
+
+### remove my account (any authenticated role) — a RETAILER-only account is
+### deleted immediately; a SUPPLIER (even a dual RETAILER+SUPPLIER account)
+### instead opens a SupplierRemoveRequest for admin review (see
+### supplier.remove.requests.http) and is only deleted once that's APPROVED
+
+DELETE {{baseUrl}}/remove
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "reason": "No longer need this account"
+}
