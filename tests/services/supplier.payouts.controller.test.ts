@@ -26,7 +26,7 @@ jest.mock('../../src/services/supplier.payouts/supplier.payout.model', () => {
 
 jest.mock('../../src/services/pools/pool.model', () => ({
   __esModule: true,
-  default: { findById: jest.fn(), distinct: jest.fn() },
+  default: { findById: jest.fn(), distinct: jest.fn(), updateOne: jest.fn() },
 }));
 
 jest.mock('../../src/services/product.offers/product.offer.model', () => ({
@@ -56,6 +56,7 @@ const mockFindById = supplierPayoutModel.findById as unknown as jest.Mock;
 const mockFindOne = supplierPayoutModel.findOne as unknown as jest.Mock;
 const mockPoolFindById = poolModel.findById as unknown as jest.Mock;
 const mockPoolDistinct = poolModel.distinct as unknown as jest.Mock;
+const mockPoolUpdateOne = poolModel.updateOne as unknown as jest.Mock;
 const mockOfferFindById = productOfferModel.findById as unknown as jest.Mock;
 const mockOfferDistinct = productOfferModel.distinct as unknown as jest.Mock;
 const mockDeliveryFindOne = deliveryModel.findOne as unknown as jest.Mock;
@@ -260,6 +261,7 @@ describe('SupplierPayoutController.update', () => {
   it('auto-stamps paidAt when status moves to COMPLETED without an explicit paidAt', async () => {
     const doc: any = {
       status: 'PROCESSING',
+      pool_ref: 'pool-1',
       paidAt: null,
       save: jest.fn().mockResolvedValue(undefined),
     };
@@ -276,5 +278,85 @@ describe('SupplierPayoutController.update', () => {
     expect(doc.transactionReference).toBe('txn-1');
     expect(doc.paidAt).toBeInstanceOf(Date);
     expect(doc.save).toHaveBeenCalled();
+  });
+
+  it('syncs Pool.supplierPaymentStatus to PAID when status transitions into COMPLETED', async () => {
+    const doc: any = {
+      status: 'PROCESSING',
+      pool_ref: 'pool-1',
+      paidAt: null,
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    mockFindById.mockResolvedValue(doc);
+    const req = {
+      params: { _id: '1' },
+      body: { status: 'COMPLETED' },
+    } as unknown as Request;
+    const res = mockRes();
+
+    await supplierPayoutController.update(req, res);
+
+    expect(mockPoolUpdateOne).toHaveBeenCalledWith(
+      { _id: 'pool-1' },
+      { $set: { supplierPaymentStatus: 'PAID' } }
+    );
+  });
+
+  it('does not touch Pool.supplierPaymentStatus when the payout is already COMPLETED', async () => {
+    const doc: any = {
+      status: 'COMPLETED',
+      pool_ref: 'pool-1',
+      paidAt: new Date('2026-01-01'),
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    mockFindById.mockResolvedValue(doc);
+    const req = {
+      params: { _id: '1' },
+      body: { transactionReference: 'txn-2' },
+    } as unknown as Request;
+    const res = mockRes();
+
+    await supplierPayoutController.update(req, res);
+
+    expect(mockPoolUpdateOne).not.toHaveBeenCalled();
+  });
+
+  it('does not sync Pool.supplierPaymentStatus for a non-COMPLETED status change', async () => {
+    const doc: any = {
+      status: 'PENDING',
+      pool_ref: 'pool-1',
+      paidAt: null,
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    mockFindById.mockResolvedValue(doc);
+    const req = {
+      params: { _id: '1' },
+      body: { status: 'PROCESSING' },
+    } as unknown as Request;
+    const res = mockRes();
+
+    await supplierPayoutController.update(req, res);
+
+    expect(mockPoolUpdateOne).not.toHaveBeenCalled();
+  });
+
+  it('still returns 200 even if the Pool.supplierPaymentStatus sync fails', async () => {
+    const doc: any = {
+      status: 'PROCESSING',
+      pool_ref: 'pool-1',
+      paidAt: null,
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    mockFindById.mockResolvedValue(doc);
+    mockPoolUpdateOne.mockRejectedValueOnce(new Error('db down'));
+    const req = {
+      params: { _id: '1' },
+      body: { status: 'COMPLETED' },
+    } as unknown as Request;
+    const res = mockRes();
+
+    await supplierPayoutController.update(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
   });
 });

@@ -26,14 +26,14 @@ jest.mock('../../src/services/deliveries/delivery.model', () => {
 
 jest.mock('../../src/services/pools/pool.model', () => ({
   __esModule: true,
-  default: { findById: jest.fn(), distinct: jest.fn() },
+  default: { findById: jest.fn(), distinct: jest.fn(), updateOne: jest.fn() },
 }));
 
 jest.mock(
   '../../src/services/pool.participants/pool.participant.model',
   () => ({
     __esModule: true,
-    default: { distinct: jest.fn() },
+    default: { distinct: jest.fn(), updateMany: jest.fn() },
   })
 );
 
@@ -55,8 +55,11 @@ const mockFindById = deliveryModel.findById as unknown as jest.Mock;
 const mockFindOne = deliveryModel.findOne as unknown as jest.Mock;
 const mockPoolFindById = poolModel.findById as unknown as jest.Mock;
 const mockPoolDistinct = poolModel.distinct as unknown as jest.Mock;
+const mockPoolUpdateOne = poolModel.updateOne as unknown as jest.Mock;
 const mockParticipantDistinct =
   poolParticipantModel.distinct as unknown as jest.Mock;
+const mockParticipantUpdateMany =
+  poolParticipantModel.updateMany as unknown as jest.Mock;
 const mockOfferDistinct = productOfferModel.distinct as unknown as jest.Mock;
 
 function mockRes() {
@@ -131,6 +134,46 @@ describe('DeliveryController.create', () => {
     expect(res.status).toHaveBeenCalledWith(201);
   });
 
+  it('moves the pool from TARGET_REACHED to DISTRIBUTING once the delivery is created', async () => {
+    mockPoolFindById.mockResolvedValue({
+      _id: 'pool-1',
+      status: 'TARGET_REACHED',
+    });
+    mockFindOne.mockResolvedValue(null);
+    mockDeliverySave.mockResolvedValue({ _id: 'delivery-1' });
+    const req = {
+      body: { pool_ref: 'pool-1' },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
+    } as unknown as Request;
+    const res = mockRes();
+
+    await deliveryController.create(req, res);
+
+    expect(mockPoolUpdateOne).toHaveBeenCalledWith(
+      { _id: 'pool-1', status: 'TARGET_REACHED' },
+      { $set: { status: 'DISTRIBUTING' } }
+    );
+  });
+
+  it('still returns 201 even if the pool -> DISTRIBUTING sync fails', async () => {
+    mockPoolFindById.mockResolvedValue({
+      _id: 'pool-1',
+      status: 'TARGET_REACHED',
+    });
+    mockFindOne.mockResolvedValue(null);
+    mockDeliverySave.mockResolvedValue({ _id: 'delivery-1' });
+    mockPoolUpdateOne.mockRejectedValueOnce(new Error('db down'));
+    const req = {
+      body: { pool_ref: 'pool-1' },
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
+    } as unknown as Request;
+    const res = mockRes();
+
+    await deliveryController.create(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(201);
+  });
+
   it('emits DELIVERY_ASSIGNED with the new delivery/pool ids and the acting admin once created', async () => {
     mockPoolFindById.mockResolvedValue({
       _id: 'pool-1',
@@ -195,11 +238,66 @@ describe('DeliveryController.update', () => {
     unsubscribe();
 
     expect(doc.deliveryStatus).toBe('DELIVERED');
+    expect(mockPoolUpdateOne).toHaveBeenCalledWith(
+      { _id: 'pool-1' },
+      { $set: { status: 'COMPLETED' } }
+    );
+    expect(mockParticipantUpdateMany).toHaveBeenCalledWith(
+      { pool_ref: 'pool-1', status: 'WAITING' },
+      { $set: { status: 'DELIVERED' } }
+    );
     expect(emitted).toHaveBeenCalledWith({
       deliveryId: 'delivery-1',
       poolId: 'pool-1',
     });
     expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('still emits DELIVERY_COMPLETED and returns 200 even if the pool/participant sync fails', async () => {
+    const doc: any = {
+      _id: 'delivery-1',
+      pool_ref: 'pool-1',
+      deliveryStatus: 'DELIVERING',
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    mockFindById.mockResolvedValue(doc);
+    mockPoolUpdateOne.mockRejectedValueOnce(new Error('db down'));
+    const req = {
+      params: { _id: 'delivery-1' },
+      body: { deliveryStatus: 'DELIVERED' },
+    } as unknown as Request;
+    const res = mockRes();
+
+    const emitted = jest.fn();
+    const unsubscribe = appBroker.on(EVENTS.DELIVERY_COMPLETED, emitted);
+
+    await deliveryController.update(req, res);
+
+    unsubscribe();
+
+    expect(emitted).toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('does not sync pool/participant status for a delivery already DELIVERED', async () => {
+    const doc: any = {
+      _id: 'delivery-1',
+      pool_ref: 'pool-1',
+      deliveryStatus: 'DELIVERED',
+      deliveredAt: 'Not Set',
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    mockFindById.mockResolvedValue(doc);
+    const req = {
+      params: { _id: 'delivery-1' },
+      body: { deliveredAt: '2026-01-01T00:00:00Z' },
+    } as unknown as Request;
+    const res = mockRes();
+
+    await deliveryController.update(req, res);
+
+    expect(mockPoolUpdateOne).not.toHaveBeenCalled();
+    expect(mockParticipantUpdateMany).not.toHaveBeenCalled();
   });
 
   it('does not re-emit DELIVERY_COMPLETED when the delivery is already DELIVERED', async () => {

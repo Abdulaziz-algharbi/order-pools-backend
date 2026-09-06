@@ -208,6 +208,8 @@ class SupplierPayoutController extends BaseController {
         return;
       }
 
+      const wasCompleted = doc.status === 'COMPLETED';
+
       for (const field of Object.keys(req.body)) {
         if (this.allowedFields.includes(field)) {
           doc[field] = req.body[field];
@@ -221,6 +223,25 @@ class SupplierPayoutController extends BaseController {
       await doc.save();
 
       this.logger.info(`${this.model.modelName} Updated`);
+
+      if (!wasCompleted && doc.status === 'COMPLETED') {
+        // Best-effort: the supplier has now actually been paid, so the
+        // pool's own money-status flag should reflect it — kept in sync
+        // here rather than left to drift as a second source of truth.
+        // Failure is logged, never allowed to block the payout update
+        // itself from succeeding.
+        try {
+          await poolModel.updateOne(
+            { _id: doc.pool_ref },
+            { $set: { supplierPaymentStatus: 'PAID' } }
+          );
+        } catch (syncError) {
+          this.logger.error(
+            `Failed to sync Pool.supplierPaymentStatus for pool ${doc.pool_ref} after payout ${doc._id} completed: ${syncError}`
+          );
+        }
+      }
+
       res.status(200).send({
         message: 'Document updated successfully',
         data: doc,

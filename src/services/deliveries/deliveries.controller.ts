@@ -53,6 +53,21 @@ class DeliveryController extends BaseController {
       const savedDoc = await newDoc.save();
       this.logger.info(`${this.model.modelName} created`);
 
+      // Best-effort: a delivery being assigned is what "distribution has
+      // started" means for the pool. Guarded on TARGET_REACHED so this
+      // never clobbers a pool a future flow already moved on from; a
+      // failure here is logged but must never undo the delivery itself.
+      try {
+        await poolModel.updateOne(
+          { _id: pool._id, status: 'TARGET_REACHED' },
+          { $set: { status: 'DISTRIBUTING' } }
+        );
+      } catch (syncError) {
+        this.logger.error(
+          `Failed to move pool ${pool._id} to DISTRIBUTING after delivery ${savedDoc._id} was created: ${syncError}`
+        );
+      }
+
       this.broker.emit(EVENTS.DELIVERY_ASSIGNED, {
         deliveryId: savedDoc._id.toString(),
         poolId: pool._id.toString(),
@@ -92,6 +107,28 @@ class DeliveryController extends BaseController {
       this.logger.info(`${this.model.modelName} Updated`);
 
       if (!wasDelivered && doc.deliveryStatus === 'DELIVERED') {
+        // Best-effort: a completed delivery is what "this pool is done"
+        // means, both for the pool itself and for every participant still
+        // WAITING on it (a REFUNDED/PAYMENT_FAILED participant never had
+        // anything delivered, so it's excluded). Failure here is logged,
+        // never allowed to block the DELIVERY_COMPLETED event below —
+        // that event driving the supplier's payout matters more than this
+        // read-model bookkeeping.
+        try {
+          await poolModel.updateOne(
+            { _id: doc.pool_ref },
+            { $set: { status: 'COMPLETED' } }
+          );
+          await poolParticipantModel.updateMany(
+            { pool_ref: doc.pool_ref, status: 'WAITING' },
+            { $set: { status: 'DELIVERED' } }
+          );
+        } catch (syncError) {
+          this.logger.error(
+            `Failed to sync pool/participant status after delivery ${doc._id} completed: ${syncError}`
+          );
+        }
+
         this.broker.emit(EVENTS.DELIVERY_COMPLETED, {
           deliveryId: doc._id.toString(),
           poolId: doc.pool_ref.toString(),
