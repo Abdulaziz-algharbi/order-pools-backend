@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import BaseController from '../base/base.controller';
 import ERRORS from '../../constants/ERRORS';
 import productOfferModel from '../product.offers/product.offer.model';
@@ -113,17 +114,33 @@ class PoolController extends BaseController {
         return;
       }
 
-      pool.status = 'CANCELLED';
-      await pool.save();
+      // Cancelling the pool and sweeping its still-pending Payment/
+      // PoolParticipant records must land together — a crash between them
+      // would otherwise leave a CANCELLED pool with payments/participants
+      // stuck PENDING forever, with nothing left to reconcile it. The
+      // refund loop below is deliberately OUTSIDE this transaction: it
+      // makes real Thawani network calls, and a DB transaction must never
+      // stay open across an external HTTP round trip.
+      const dbSession = await mongoose.startSession();
+      try {
+        await dbSession.withTransaction(async () => {
+          pool.status = 'CANCELLED';
+          await pool.save({ session: dbSession });
 
-      await paymentModel.updateMany(
-        { pool_ref: pool._id, status: 'PENDING' },
-        { $set: { status: 'FAILED' } }
-      );
-      await poolParticipantModel.updateMany(
-        { pool_ref: pool._id, status: 'PENDING_PAYMENT' },
-        { $set: { status: 'PAYMENT_FAILED' } }
-      );
+          await paymentModel.updateMany(
+            { pool_ref: pool._id, status: 'PENDING' },
+            { $set: { status: 'FAILED' } },
+            { session: dbSession }
+          );
+          await poolParticipantModel.updateMany(
+            { pool_ref: pool._id, status: 'PENDING_PAYMENT' },
+            { $set: { status: 'PAYMENT_FAILED' } },
+            { session: dbSession }
+          );
+        });
+      } finally {
+        await dbSession.endSession();
+      }
 
       const completedPayments = await paymentModel.find({
         pool_ref: pool._id,

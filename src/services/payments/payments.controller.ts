@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import BaseController from '../base/base.controller';
 import ERRORS from '../../constants/ERRORS';
 import EVENTS from '../../constants/EVENTS';
@@ -83,26 +84,43 @@ class PaymentController extends BaseController {
       return payment;
     }
 
-    const confirmed = await paymentModel.findOneAndUpdate(
-      { _id: payment._id, status: 'PENDING' },
-      {
-        $set: {
-          status: 'COMPLETED',
-          thawaniPaymentId: (session.invoice as string) ?? session.session_id,
-        },
-      },
-      { new: true }
-    );
-    if (!confirmed) {
-      // Lost a race with a concurrent confirm — whichever call won already
-      // did the work below.
-      return payment;
+    // Everything from here on is pure DB writes (the Thawani call already
+    // happened above) — safe to wrap in a transaction so the Payment
+    // flipping COMPLETED and its PoolParticipant flipping WAITING can
+    // never land only one of the two.
+    const dbSession = await mongoose.startSession();
+    let confirmed: any = null;
+    try {
+      await dbSession.withTransaction(async () => {
+        const updated = await paymentModel.findOneAndUpdate(
+          { _id: payment._id, status: 'PENDING' },
+          {
+            $set: {
+              status: 'COMPLETED',
+              thawaniPaymentId:
+                (session.invoice as string) ?? session.session_id,
+            },
+          },
+          { new: true, session: dbSession }
+        );
+        if (!updated) return; // Lost a race with a concurrent confirm.
+
+        await poolParticipantModel.updateOne(
+          { _id: updated.poolParticipant_ref, status: 'PENDING_PAYMENT' },
+          { $set: { status: 'WAITING' } },
+          { session: dbSession }
+        );
+        confirmed = updated;
+      });
+    } finally {
+      await dbSession.endSession();
     }
 
-    await poolParticipantModel.updateOne(
-      { _id: confirmed.poolParticipant_ref, status: 'PENDING_PAYMENT' },
-      { $set: { status: 'WAITING' } }
-    );
+    if (!confirmed) {
+      // Lost a race with a concurrent confirm — whichever call won already
+      // did the work above.
+      return payment;
+    }
 
     this.broker.emit(EVENTS.PAYMENT_COMPLETED, {
       paymentId: confirmed._id.toString(),
@@ -275,13 +293,23 @@ class PaymentController extends BaseController {
         return;
       }
 
-      payment.status = 'REFUNDED';
-      await payment.save();
+      // The Payment flipping REFUNDED and its PoolParticipant flipping
+      // REFUNDED must land together, not just one of the two.
+      const dbSession = await mongoose.startSession();
+      try {
+        await dbSession.withTransaction(async () => {
+          payment.status = 'REFUNDED';
+          await payment.save({ session: dbSession });
 
-      await poolParticipantModel.updateOne(
-        { _id: payment.poolParticipant_ref },
-        { $set: { status: 'REFUNDED' } }
-      );
+          await poolParticipantModel.updateOne(
+            { _id: payment.poolParticipant_ref },
+            { $set: { status: 'REFUNDED' } },
+            { session: dbSession }
+          );
+        });
+      } finally {
+        await dbSession.endSession();
+      }
 
       this.broker.emit(EVENTS.PAYMENT_REFUNDED, {
         paymentId: payment._id.toString(),

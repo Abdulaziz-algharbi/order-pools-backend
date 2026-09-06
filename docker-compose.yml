@@ -1,16 +1,61 @@
 services:
+  # Runs as a single-node replica set (not a standalone mongod) — Mongoose
+  # sessions/transactions (see the pool-expiry and payment-confirmation
+  # flows) require one; a plain standalone mongod never supports them, no
+  # matter what the app does. mongo-init below turns this node into that
+  # replica set the first time it comes up; every later `docker-compose up`
+  # just rejoins the already-initiated set. Client URIs must add
+  # `?replicaSet=rs0&directConnection=true` — see .env.example — the
+  # `directConnection` half matters specifically because this node
+  # advertises itself internally as `mongo:27017` (this compose network's
+  # DNS name), which isn't reachable from the host; without it, the driver
+  # would try to "discover" that address and fail to reconnect after the
+  # initial handshake.
   mongo:
     image: mongo:6
+    command: ['--replSet', 'rs0', '--bind_ip_all']
     volumes:
       - data:/data/db
     ports:
       - 27017:27017
     networks:
       - internal
+    healthcheck:
+      test: |
+        mongosh --quiet --eval "db.adminCommand('ping').ok" || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-shot: initiates the replica set once, then exits. Safe to leave in
+  # the stack permanently — rs.initiate() on an already-initiated set just
+  # errors, which this swallows.
+  mongo-init:
+    image: mongo:6
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - internal
+    restart: 'no'
+    entrypoint:
+      - bash
+      - -c
+      - |
+        mongosh --host mongo:27017 --quiet --eval "
+          try {
+            rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongo:27017' }] });
+          } catch (e) {
+            if (!/already initialized/.test(e.message)) throw e;
+          }
+        "
 
   mongo-express:
     image: mongo-express
     restart: always
+    depends_on:
+      mongo-init:
+        condition: service_completed_successfully
     networks:
       - internal
       - default

@@ -25,9 +25,12 @@ const config = {
   port: parseInt(process.env.PORT || '8000', 10),
   appMode: (process.env.APP_MODE || 'DEV') as
     'DEV' | 'PROD' | 'TEST' | 'STAGING',
+  // See .env.example for why replicaSet/directConnection are both required
+  // (mongo runs as a single-node replica set — see docker-compose.yml —
+  // so Mongoose sessions/transactions work).
   mongoUri:
     process.env[`${process.env.APP_MODE}_MONGO_URI`] ||
-    'mongodb://localhost:27017/order-pool',
+    'mongodb://localhost:27017/order-pool?replicaSet=rs0&directConnection=true',
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
   jwtTokenSecret: process.env.JWT_TOKEN_SECRET || '',
   jwtTokenTtl: process.env.JWT_TOKEN_TTL || '1h',

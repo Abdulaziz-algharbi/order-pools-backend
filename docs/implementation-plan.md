@@ -34,7 +34,7 @@
 - No logic drives `Delivery.deliveryStatus` progression (`PENDING -> DELIVERING -> DELIVERED`) beyond raw `PATCH` — creation itself is now gated on `Pool.status` (see `docs/unimplemented-features.md` §4).
 - `SupplierPayout.amount` is a direct lookup of the pool's `ProductOffer.price`, not a computed platform-commission split — the admin fixes the platform's margin up front in `Pool.pricePerUnit` at pool-creation time, and the frontend is responsible for warning the admin if a chosen `pricePerUnit`/`minimumContribution` would produce a loss (no backend enforcement of profitability by design, for pricing flexibility).
 - Payment provider integration is Thawani (see `src/services/thawani/thawani.gateway.ts`) — Stripe is not used anywhere in the MVP.
-- No transactions/sessions used anywhere in the codebase, despite several flows above needing atomicity across multiple documents.
+- Mongoose sessions/transactions are now used in `PoolController.expirePool()` and `PaymentController.confirmPaymentById()`/`confirmRefund()` — local dev Mongo (`docker-compose.yml`) runs as a single-node replica set specifically so these work (a standalone `mongod` can't do transactions at all). The pool-join guard and the Pool/PoolParticipant lifecycle-status syncs (see the `Pool.status` note above) are deliberately still non-transactional best-effort writes — see each site's own comment for why.
 
 **Infrastructure**
 - Redis/BullMQ/MQTT mentioned in `README.md` as intended are not installed or configured; the in-process `AppBroker` (`EventEmitter`) is the only pub/sub mechanism today.

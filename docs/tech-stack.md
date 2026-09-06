@@ -10,9 +10,9 @@
 
 ## Database
 
-- **MongoDB** via **Mongoose 9**. Connection helper in `src/db/connect-to-db.ts`. URI resolved from `${APP_MODE}_MONGO_URI` env var (`DEV_MONGO_URI` / `STAGIN_MONGO_URI` [sic, typo in `.env.example`] / `PROD_MONGO_URI`), falling back to `mongodb://localhost:27017/order-pool`.
-- Local dev DB via `docker-compose.yml`: `mongo:6` + `mongo-express` admin UI on port 8081 (basic auth `admin`/`passpass` — dev-only credentials, do not reuse anywhere real).
-- No transactions/sessions are used anywhere in the codebase yet, despite several operations (pool joins, payouts) needing them.
+- **MongoDB** via **Mongoose 9**. Connection helper in `src/db/connect-to-db.ts`. URI resolved from `${APP_MODE}_MONGO_URI` env var (`DEV_MONGO_URI` / `STAGIN_MONGO_URI` [sic, typo in `.env.example`] / `PROD_MONGO_URI`), falling back to `mongodb://localhost:27017/order-pool?replicaSet=rs0&directConnection=true`.
+- Local dev DB via `docker-compose.yml`: `mongo:6` running as a **single-node replica set** (`--replSet rs0`, initiated once by a one-shot `mongo-init` service) + `mongo-express` admin UI on port 8081 (basic auth `admin`/`passpass` — dev-only credentials, do not reuse anywhere real). The replica set (not a standalone `mongod`) is what makes Mongoose sessions/transactions possible at all — see `.env.example` for why client URIs need both `replicaSet` and `directConnection` query params.
+- Mongoose sessions/transactions are used in `PoolController.expirePool()` (cancel + Payment/PoolParticipant sweep) and `PaymentController.confirmPaymentById()`/`confirmRefund()` (Payment status flip + its PoolParticipant status flip). The pool-join guard still deliberately uses a single-document atomic `findOneAndUpdate` instead (an external Thawani call sits in the middle of that flow, and a DB transaction must never stay open across an external HTTP round trip).
 
 ## Auth
 

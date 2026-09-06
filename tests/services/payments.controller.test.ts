@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 
 jest.mock('../../src/services/payments/payment.model', () => {
   const actual = jest.requireActual(
@@ -57,6 +58,20 @@ const mockParticipantFindOneAndUpdate =
   poolParticipantModel.findOneAndUpdate as unknown as jest.Mock;
 const mockPoolFindById = poolModel.findById as unknown as jest.Mock;
 const mockPoolUpdateOne = poolModel.updateOne as unknown as jest.Mock;
+
+// confirmPaymentById()/confirmRefund() wrap their Payment+PoolParticipant
+// writes in a real mongoose transaction (see payments.controller.ts) —
+// mongoose.startSession() is mocked here rather than the real driver so
+// these tests never need a live, replica-set-backed Mongo. The mock just
+// runs the callback directly, matching the one behavior these tests care
+// about: everything inside withTransaction() still executes.
+jest.spyOn(mongoose, 'startSession').mockImplementation(
+  async () =>
+    ({
+      withTransaction: async (fn: () => Promise<unknown>) => fn(),
+      endSession: jest.fn().mockResolvedValue(undefined),
+    }) as unknown as mongoose.ClientSession
+);
 
 function mockRes() {
   const res: Partial<Response> = {};
@@ -141,13 +156,40 @@ describe('PaymentController.confirm', () => {
       {
         $set: { status: 'COMPLETED', thawaniPaymentId: 'inv-1' },
       },
-      { new: true }
+      { new: true, session: expect.anything() }
     );
     expect(mockParticipantUpdateOne).toHaveBeenCalledWith(
       { _id: 'participant-1', status: 'PENDING_PAYMENT' },
-      { $set: { status: 'WAITING' } }
+      { $set: { status: 'WAITING' } },
+      { session: expect.anything() }
     );
     expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('never reports success if the participant flip inside the transaction fails', async () => {
+    mockFindById.mockResolvedValue({
+      _id: 'payment-1',
+      user_ref: 'retailer-1',
+      status: 'PENDING',
+      thawaniSessionId: 'sess-1',
+    });
+    mockGetSession.mockResolvedValue({
+      payment_status: 'paid',
+      invoice: 'inv-1',
+    });
+    mockFindOneAndUpdate.mockResolvedValue({
+      _id: 'payment-1',
+      poolParticipant_ref: 'participant-1',
+      user_ref: 'retailer-1',
+      status: 'COMPLETED',
+    });
+    mockParticipantUpdateOne.mockRejectedValueOnce(new Error('db down'));
+    const res = mockRes();
+
+    await paymentController.confirm(retailerReq(), res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.status).not.toHaveBeenCalledWith(200);
   });
 
   it('is idempotent: a payment already resolved is returned unchanged without calling Thawani', async () => {
@@ -314,9 +356,28 @@ describe('PaymentController.confirmRefund', () => {
     expect(payment.status).toBe('REFUNDED');
     expect(mockParticipantUpdateOne).toHaveBeenCalledWith(
       { _id: 'participant-1' },
-      { $set: { status: 'REFUNDED' } }
+      { $set: { status: 'REFUNDED' } },
+      { session: expect.anything() }
     );
     expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('never reports success if the participant flip inside the transaction fails', async () => {
+    const payment: any = {
+      _id: 'payment-1',
+      poolParticipant_ref: 'participant-1',
+      user_ref: 'retailer-1',
+      status: 'REFUND_PENDING',
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    mockFindById.mockResolvedValue(payment);
+    mockParticipantUpdateOne.mockRejectedValueOnce(new Error('db down'));
+    const res = mockRes();
+
+    await paymentController.confirmRefund(adminReq(), res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.status).not.toHaveBeenCalledWith(200);
   });
 });
 

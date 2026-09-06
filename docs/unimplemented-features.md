@@ -125,16 +125,15 @@ The old doc's §7 and §8 were two views of the same gap (no `SupplierRequest` e
 ## 10. Historical Data
 
 - The status-based soft-close pattern (`ProductOffer.status`, `Pool.status`, `Complaint.status`, `SupplierRequest.status`, `SupplierRemoveRequest.status`) remains the right mechanism and is well-established now across five entities.
-- **Resolved from the old snapshot — down to two entities.** `DELETE` is now behind `tokenMiddleware` + either `requireRole('ADMIN')` or an owner-or-ADMIN controller check on: `addresses`, `complaints`, `deliveries`, `notifications`, `pool.participants`, `pools`, `product.offers`, `supplier.remove.requests`, `supplier.requests`, `users`.
-- **Still a real, active gap on exactly two entities:** `payments` and `supplier.payouts` — both still plain `BaseController` with zero route-level auth of any kind (see §1). `DELETE /api/v1/payments/:id` and `DELETE /api/v1/payouts/:id` will hard-delete a financial record for anyone, authenticated or not.
+- **Resolved from the old snapshot.** `DELETE` is now behind `tokenMiddleware` + either `requireRole('ADMIN')` or an owner-or-ADMIN controller check on: `addresses`, `complaints`, `deliveries`, `notifications`, `pool.participants`, `pools`, `product.offers`, `supplier.remove.requests`, `supplier.requests`, `users`. `payments` and `supplier.payouts` — re-verified directly against their route files — never had a `DELETE` route at all (a `Payment`/`SupplierPayout` is a financial record, deliberately never hard-deletable via the API), and both now have full `requireRole` coverage on every route they do expose.
 
 ---
 
 ## 11. Cross-Cutting Gaps
 
 - **Resolved from the old snapshot.** `BaseController.list()` is now the single place list() lives — every subclass that used to reimplement the full try/catch/response-formatting boilerplate now only overrides `buildListFilter(req, res)` (role-scoped filter, or `null` after sending its own response, e.g. a 401), and optionally `listSelect()` (a projection, e.g. `UsersController`'s `-password`) or `transformListDoc(doc, req)` (per-document post-processing, e.g. `NotificationController`'s recipient-redaction). Pagination is opt-in via `?page`/`?limit` (both required, positive integers, `limit` capped at 100) — a caller that omits them gets today's unbounded behavior unchanged, so every existing caller keeps working. There is still no arbitrary client-side field filter (e.g. `GET /offers?status=PENDING` beyond the role scoping) — that would need each `buildListFilter()` to merge in caller-supplied query params, which none do yet.
-- **Auth is now broad but not universal.** `tokenMiddleware`/`requireRole` cover essentially the whole API except `payments` and `supplier.payouts` (§1) — a major change from the old snapshot ("almost no route has auth"), but those two remaining modules are a real, currently-exploitable gap, not a rounding error.
-- **No multi-document transactions anywhere.** Still true. The pool-join guard (§3) works around this for its one case using a single-document atomic `findOneAndUpdate` with an `$expr` filter + aggregation-pipeline update — a real, working pattern now available to copy for similar problems — but it only solves single-document atomicity. Multi-document admin actions this spec still calls for (approve offer → create Pool; delivery reaches DELIVERED → pool COMPLETED) still have no session/transaction to build on, and the local dev `docker-compose.yml` runs a standalone `mongo:6` (no replica set), which doesn't support multi-document transactions at all without also changing the deployment topology — worth deciding deliberately before this is needed, not assuming it'll just work.
+- **Resolved from the old snapshot.** `tokenMiddleware`/`requireRole` now cover `payments` and `supplier.payouts` too (`requireRole('ADMIN', 'RETAILER')` and `requireRole('ADMIN', 'SUPPLIER')` respectively, per-route) — re-verified directly against `payments.routes.ts`/`supplier.payouts.routes.ts`, both `payments.routes.test.ts`/`supplier.payouts.routes.test.ts` now exist. Auth coverage is effectively universal across the API at this point.
+- **Resolved from the old snapshot, for two specific flows.** `docker-compose.yml`'s `mongo` service now runs as a single-node replica set (`--replSet rs0`, initiated once by a one-shot `mongo-init` service — see `docs/tech-stack.md`), specifically so Mongoose sessions/transactions work at all; client URIs need `?replicaSet=rs0&directConnection=true` (see `.env.example`). `PoolController.expirePool()` (cancel + Payment/PoolParticipant sweep) and `PaymentController.confirmPaymentById()`/`confirmRefund()` (Payment status flip + its PoolParticipant status flip) now use real multi-document transactions. Still not transactional, deliberately: the pool-join guard (§3, an external Thawani call sits in the middle of that flow — a DB transaction must never stay open across an external HTTP round trip) and the Pool/PoolParticipant lifecycle-status syncs added since (delivery→pool/participant status, payout→pool payment status — all logged-best-effort by design, see each site's comment). Multi-document admin actions this spec still calls for (approve offer → create Pool) still have no transaction wrapping them.
 
 ---
 
@@ -167,33 +166,34 @@ Already implemented (new or newly-closed since 2026-08-28):
 - Jest test suite wired up and substantial (23 suites / 335+ tests as of this pass)
 
 Still missing (confirmed still true, re-verified against current code):
-- Auth/authz entirely absent on payments and supplier.payouts (the most exposed modules in the API today)
 - Approve-offer workflow that atomically creates the Pool (still two uncoordinated calls)
 - Request-negotiation / reject-offer dedicated actions + supplier notifications
 - Arbitrary client-side list() filters (e.g. `?status=`) beyond role scoping — `buildListFilter()` gives every controller one place to add this, but none do yet
 - SUPPLIER-visible "participants of my own pool" listing (admin-only and self-only today)
-- TARGET_REACHED -> DISTRIBUTING -> COMPLETED pool transitions (delivery creation/completion doesn't move Pool.status)
 - Notification on delivery status change post-assignment (PENDING -> DELIVERING -> DELIVERED)
 - Complaint conversation/message thread; supplier-vs-OrderPool fault classification; complaint-driven notifications
 - Supplier-by-role filtering (?role=SUPPLIER) / supplier profile aggregation
 - Notification.type coverage for offer-rejected/negotiation-requested/supplier-request-decided/removal-request-decided/complaint events
-- Multi-document transactions (still none; only one single-document atomic-update workaround exists, for pool joins)
 - Referential-integrity check before approving a SupplierRemoveRequest (open pools/payouts not checked)
+
+Resolved since the above was written (auth, transactions, pool lifecycle, list()):
+- Auth/authz now covers payments and supplier.payouts (requireRole per route, verified against payments.routes.ts/supplier.payouts.routes.ts + their route tests)
+- Mongoose sessions/transactions now used in PoolController.expirePool() and PaymentController.confirmPaymentById()/confirmRefund() — mongo runs as a single-node replica set specifically for this (see docs/tech-stack.md)
+- TARGET_REACHED -> DISTRIBUTING -> COMPLETED pool transitions now drive automatically off delivery creation/completion (see the Pool entity note in docs/project-scope.md)
+- BaseController.list() generic filtering/pagination (see the resolved bullet above)
 
 Needs model:
 - ComplaintMessage / complaint conversation entity (still not started)
 
 Needs controller/service:
 - ProductOffer: approve / requestNegotiation / reject actions (atomic with Pool creation where relevant)
-- Pool: participants-by-pool listing for the owning SUPPLIER; TARGET_REACHED->DISTRIBUTING->COMPLETED transition logic
+- Pool: participants-by-pool listing for the owning SUPPLIER
 - Complaint: add message; classify fault
-- Payments / SupplierPayouts: any business logic and auth at all (currently bare CRUD)
 
 Needs route:
 - POST /offers/:id/approve, /offers/:id/negotiate, /offers/:id/reject
 - GET /pools/:id/participants (or equivalent SUPPLIER-scoped filter on the existing endpoint)
 - POST /complaints/:id/messages, PATCH .../classify
-- tokenMiddleware + requireRole applied to payments and supplier.payouts
 
 Needs validation:
 - Zod schemas for every new route above

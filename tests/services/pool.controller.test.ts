@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 
 jest.mock('../../src/services/pools/pool.model', () => {
   const actual = jest.requireActual('../../src/services/pools/pool.model');
@@ -49,6 +50,20 @@ const mockPaymentFind = paymentModel.find as unknown as jest.Mock;
 const mockPaymentUpdateMany = paymentModel.updateMany as unknown as jest.Mock;
 const mockParticipantUpdateMany =
   poolParticipantModel.updateMany as unknown as jest.Mock;
+
+// expirePool() wraps the pool-cancel + Payment/PoolParticipant sweep in a
+// real mongoose transaction (see pool.controller.ts) — mongoose.startSession()
+// is mocked here rather than the real driver so these tests never need a
+// live, replica-set-backed Mongo. The mock just runs the callback
+// directly, matching the one behavior these tests care about: everything
+// inside withTransaction() still executes.
+jest.spyOn(mongoose, 'startSession').mockImplementation(
+  async () =>
+    ({
+      withTransaction: async (fn: () => Promise<unknown>) => fn(),
+      endSession: jest.fn().mockResolvedValue(undefined),
+    }) as unknown as mongoose.ClientSession
+);
 
 function mockRes() {
   const res: Partial<Response> = {};
@@ -289,13 +304,29 @@ describe('PoolController.expirePool', () => {
     expect(pool.save).toHaveBeenCalled();
     expect(mockPaymentUpdateMany).toHaveBeenCalledWith(
       { pool_ref: 'pool-1', status: 'PENDING' },
-      { $set: { status: 'FAILED' } }
+      { $set: { status: 'FAILED' } },
+      { session: expect.anything() }
     );
     expect(mockParticipantUpdateMany).toHaveBeenCalledWith(
       { pool_ref: 'pool-1', status: 'PENDING_PAYMENT' },
-      { $set: { status: 'PAYMENT_FAILED' } }
+      { $set: { status: 'PAYMENT_FAILED' } },
+      { session: expect.anything() }
     );
     expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('never reports success if the participant sweep inside the transaction fails', async () => {
+    const pool = poolDoc();
+    mockFindById.mockResolvedValue(pool);
+    mockParticipantUpdateMany.mockRejectedValueOnce(new Error('db down'));
+    const req = { params: { _id: '1' } } as unknown as Request;
+    const res = mockRes();
+
+    await poolController.expirePool(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.status).not.toHaveBeenCalledWith(200);
+    expect(mockPaymentFind).not.toHaveBeenCalled();
   });
 
   it('requests a refund for every COMPLETED payment and reports the count', async () => {
