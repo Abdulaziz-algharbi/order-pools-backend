@@ -26,7 +26,10 @@ export default [
     },
     rules: {
       'no-unused-vars': 'off',
-      '@typescript-eslint/no-unused-vars': ['error'],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_' },
+      ],
       'no-console': 'warn',
       'no-debugger': 'warn',
       'prettier/prettier': 'warn',

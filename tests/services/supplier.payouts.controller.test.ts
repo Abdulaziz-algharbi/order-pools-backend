@@ -155,6 +155,16 @@ describe('SupplierPayoutController.create', () => {
 });
 
 describe('SupplierPayoutController.list', () => {
+  it('returns 401 when there is no authenticated user', async () => {
+    const req = { meta: {} } as unknown as Request;
+    const res = mockRes();
+
+    await supplierPayoutController.list(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(mockFind).not.toHaveBeenCalled();
+  });
+
   it('returns every payout for ADMIN', async () => {
     mockFind.mockResolvedValue([]);
     const req = {
@@ -179,6 +189,75 @@ describe('SupplierPayoutController.list', () => {
     await supplierPayoutController.list(req, res);
 
     expect(mockFind).toHaveBeenCalledWith({ pool_ref: { $in: ['pool-1'] } });
+  });
+});
+
+describe('SupplierPayoutController.getById', () => {
+  it('returns 401 when there is no authenticated user', async () => {
+    const req = { meta: {}, params: { _id: '1' } } as unknown as Request;
+    const res = mockRes();
+
+    await supplierPayoutController.getById(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(mockFindById).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 when the payout does not exist', async () => {
+    mockFindById.mockResolvedValue(null);
+    const req = {
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
+      params: { _id: 'missing' },
+    } as unknown as Request;
+    const res = mockRes();
+
+    await supplierPayoutController.getById(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+  });
+
+  it("returns 403 when a SUPPLIER requests a payout for a pool built from someone else's offer", async () => {
+    mockFindById.mockResolvedValue({ pool_ref: 'pool-1' });
+    mockOfferDistinct.mockResolvedValue(['offer-9']);
+    mockPoolDistinct.mockResolvedValue(['pool-9']);
+    const req = {
+      meta: { user: { userId: 'supplier-1', roles: ['SUPPLIER'] } },
+      params: { _id: 'payout-1' },
+    } as unknown as Request;
+    const res = mockRes();
+
+    await supplierPayoutController.getById(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+  });
+
+  it('returns the payout for the owning SUPPLIER', async () => {
+    mockFindById.mockResolvedValue({ pool_ref: 'pool-1' });
+    mockOfferDistinct.mockResolvedValue(['offer-1']);
+    mockPoolDistinct.mockResolvedValue(['pool-1']);
+    const req = {
+      meta: { user: { userId: 'supplier-1', roles: ['SUPPLIER'] } },
+      params: { _id: 'payout-1' },
+    } as unknown as Request;
+    const res = mockRes();
+
+    await supplierPayoutController.getById(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('lets ADMIN fetch any payout', async () => {
+    mockFindById.mockResolvedValue({ pool_ref: 'pool-1' });
+    const req = {
+      meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
+      params: { _id: 'payout-1' },
+    } as unknown as Request;
+    const res = mockRes();
+
+    await supplierPayoutController.getById(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockOfferDistinct).not.toHaveBeenCalled();
   });
 });
 

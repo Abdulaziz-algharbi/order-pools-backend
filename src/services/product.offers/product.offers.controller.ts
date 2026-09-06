@@ -39,28 +39,17 @@ class ProductOfferController extends BaseController {
   }
 
   // ADMIN sees every offer; a SUPPLIER only sees their own.
-  async list(req: Request, res: Response): Promise<void> {
-    try {
-      const user = req.meta.user;
-      if (!user) {
-        res.status(401).send({ message: 'Access token is missing' });
-        return;
-      }
-
-      const filter = user.roles.includes('ADMIN')
-        ? {}
-        : { user_ref: user.userId };
-
-      const docs = await this.model.find(filter);
-      this.logger.info(`${this.model.modelName} Retrieved`);
-      res.status(200).send({
-        message: 'Documents retrieved successfully',
-        data: docs,
-        total: docs.length,
-      });
-    } catch (error) {
-      this.errorHandler(error, req, res);
+  protected async buildListFilter(
+    req: Request,
+    res: Response
+  ): Promise<Record<string, unknown> | null> {
+    const user = req.meta.user;
+    if (!user) {
+      res.status(401).send({ message: 'Access token is missing' });
+      return null;
     }
+
+    return user.roles.includes('ADMIN') ? {} : { user_ref: user.userId };
   }
 
   // ADMIN may fetch any offer; a SUPPLIER only one of their own.

@@ -46,7 +46,7 @@ describe('UserController.list', () => {
 
     await usersController.list(req, res);
 
-    expect(mockFind).toHaveBeenCalledWith();
+    expect(mockFind).toHaveBeenCalledWith({});
     expect(query.select).toHaveBeenCalledWith('-password');
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.send).toHaveBeenCalledWith(

@@ -101,31 +101,28 @@ class NotificationController extends BaseController {
   // ADMIN sees every notification, in full. A RETAILER/SUPPLIER sees only
   // notifications they're a recipient of, and only their own recipient
   // entry within each.
-  async list(req: Request, res: Response): Promise<void> {
-    try {
-      const user = req.meta.user;
-      if (!user) {
-        res.status(401).send({ message: 'Access token is missing' });
-        return;
-      }
-
-      const isAdmin = user.roles.includes('ADMIN');
-      const filter = isAdmin ? {} : { 'recipients.user_ref': user.userId };
-
-      const docs = await this.model.find(filter);
-      const data = isAdmin
-        ? docs
-        : docs.map((doc) => this.scopeToRecipient(doc, user.userId));
-
-      this.logger.info(`${this.model.modelName} Retrieved`);
-      res.status(200).send({
-        message: 'Documents retrieved successfully',
-        data,
-        total: data.length,
-      });
-    } catch (error) {
-      this.errorHandler(error, req, res);
+  protected async buildListFilter(
+    req: Request,
+    res: Response
+  ): Promise<Record<string, unknown> | null> {
+    const user = req.meta.user;
+    if (!user) {
+      res.status(401).send({ message: 'Access token is missing' });
+      return null;
     }
+
+    return user.roles.includes('ADMIN')
+      ? {}
+      : { 'recipients.user_ref': user.userId };
+  }
+
+  // buildListFilter() above already guarantees req.meta.user exists by the
+  // time this runs (it 401s and short-circuits list() otherwise).
+  protected transformListDoc(doc: unknown, req: Request): unknown {
+    const user = req.meta.user!;
+    return user.roles.includes('ADMIN')
+      ? doc
+      : this.scopeToRecipient(doc, user.userId);
   }
 
   // Same visibility/scoping rule as list(), applied to a single document.

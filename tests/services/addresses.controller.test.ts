@@ -180,7 +180,7 @@ describe('AddressController.list', () => {
 
     await addressesController.list(req, res);
 
-    expect(mockFind).toHaveBeenCalledWith();
+    expect(mockFind).toHaveBeenCalledWith({});
     expect(mockUserFindById).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(200);
   });

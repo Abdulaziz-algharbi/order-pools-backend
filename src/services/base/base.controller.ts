@@ -115,16 +115,90 @@ class BaseController {
     }
   }
 
+  // The one place a subclass customizes list() visibility — return the
+  // Mongoose filter for the caller (e.g. role-scoped to their own
+  // documents), or `null` after sending a response yourself (e.g. a 401
+  // for an unauthenticated caller) to short-circuit list() entirely.
+  // Defaults to "everyone sees everything", matching a subclass that
+  // never needed scoping in the first place.
+  protected async buildListFilter(
+    _req: Request,
+    _res: Response
+  ): Promise<Record<string, unknown> | null> {
+    return {};
+  }
+
+  // A Mongoose projection string (e.g. '-password'), applied to every
+  // list() query. Rarely needed — most services don't have a field worth
+  // excluding from a list response.
+  protected listSelect(): string | null {
+    return null;
+  }
+
+  // Per-document post-processing applied after the query resolves (e.g.
+  // redacting a Notification's `recipients[]` down to the caller's own
+  // entry). Defaults to a no-op.
+  protected transformListDoc(doc: unknown, _req: Request): unknown {
+    return doc;
+  }
+
+  // Pagination is opt-in via ?page & ?limit (both required and must be
+  // positive integers, capped at 100 per page) — a caller that omits them
+  // gets today's behavior unchanged: every matching document, in one
+  // response, with `total` equal to how many came back. This keeps every
+  // existing caller (and every list() override that never anticipated
+  // pagination) working exactly as before.
+  private parseListPagination(
+    req: Request
+  ): { page: number; limit: number } | null {
+    // req.query is always an object on a real Express request, but many
+    // existing unit tests construct a bare `{}` request that skips it —
+    // guard rather than throw on those.
+    const q = (req.query ?? {}) as Record<string, unknown>;
+    const page = Number(q.page);
+    const limit = Number(q.limit);
+    if (
+      !Number.isInteger(page) ||
+      !Number.isInteger(limit) ||
+      page < 1 ||
+      limit < 1
+    ) {
+      return null;
+    }
+    return { page, limit: Math.min(limit, 100) };
+  }
+
   async list(req: Request, res: Response): Promise<void> {
     try {
-      // add pagination, filtering, and sorting logic here if needed
-      // const q = {}
-      const docs = await this.model.find();
+      const filter = await this.buildListFilter(req, res);
+      if (filter === null) return; // buildListFilter already responded
+
+      const pagination = this.parseListPagination(req);
+
+      let query = this.model.find(filter);
+      const select = this.listSelect();
+      if (select) query = query.select(select);
+      if (pagination) {
+        query = query
+          .skip((pagination.page - 1) * pagination.limit)
+          .limit(pagination.limit);
+      }
+
+      const docs = await query;
+      const data = docs.map((doc: unknown) => this.transformListDoc(doc, req));
+
+      const total = pagination
+        ? await this.model.countDocuments(filter)
+        : data.length;
+
       this.logger.info(`${this.model.modelName} Retrieved`);
       res.status(200).send({
         message: 'Documents retrieved successfully',
-        data: docs,
-        total: docs.length,
+        data,
+        total,
+        ...(pagination
+          ? { page: pagination.page, limit: pagination.limit }
+          : {}),
       });
     } catch (error) {
       this.errorHandler(error, req, res);

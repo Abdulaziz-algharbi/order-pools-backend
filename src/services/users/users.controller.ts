@@ -13,18 +13,8 @@ class UserController extends BaseController {
     super(User, couldBeUpdated);
   }
 
-  async list(req: Request, res: Response): Promise<void> {
-    try {
-      const docs = await this.model.find().select('-password');
-      this.logger.info(`${this.model.modelName} Retrieved`);
-      res.status(200).send({
-        message: 'Documents retrieved successfully',
-        data: docs,
-        total: docs.length,
-      });
-    } catch (error) {
-      this.errorHandler(error, req, res);
-    }
+  protected listSelect(): string | null {
+    return '-password';
   }
 
   async getById(req: Request, res: Response): Promise<void> {

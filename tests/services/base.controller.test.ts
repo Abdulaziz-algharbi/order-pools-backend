@@ -18,7 +18,26 @@ function makeModel() {
   MockModel.find = jest.fn();
   MockModel.findById = jest.fn();
   MockModel.deleteOne = jest.fn();
+  MockModel.countDocuments = jest.fn();
   return MockModel;
+}
+
+// A minimal thenable mock for a chained Mongoose find() query
+// (.select()/.skip()/.limit(), each returning the same query object,
+// awaiting it resolves to `result`) — needed once list() starts
+// conditionally chaining those onto whatever find() returns.
+function mockQuery(result: unknown) {
+  const query: any = {
+    select: jest.fn(),
+    skip: jest.fn(),
+    limit: jest.fn(),
+    then: (resolve: (v: unknown) => void, reject: (e: unknown) => void) =>
+      Promise.resolve(result).then(resolve, reject),
+  };
+  query.select.mockReturnValue(query);
+  query.skip.mockReturnValue(query);
+  query.limit.mockReturnValue(query);
+  return query;
 }
 
 function mockRes() {
@@ -203,5 +222,147 @@ describe('BaseController CRUD methods route unexpected errors through errorHandl
     expect(res.send).toHaveBeenCalledWith({
       message: ERRORS.INTERNAL_SERVER_ERROR,
     });
+  });
+});
+
+describe('BaseController.list generic filtering/pagination', () => {
+  it('defaults to every document, unpaginated, when the caller supplies no page/limit', async () => {
+    const model = makeModel();
+    model.find.mockResolvedValue([{ _id: '1' }, { _id: '2' }]);
+    const controller = new BaseController(model, ['name']);
+    const req = { query: {} } as unknown as Request;
+    const res = mockRes();
+
+    await controller.list(req, res);
+
+    expect(model.find).toHaveBeenCalledWith({});
+    expect(model.countDocuments).not.toHaveBeenCalled();
+    expect(res.send).toHaveBeenCalledWith({
+      message: 'Documents retrieved successfully',
+      data: [{ _id: '1' }, { _id: '2' }],
+      total: 2,
+    });
+  });
+
+  it('applies skip/limit and returns page/limit/total when ?page & ?limit are valid', async () => {
+    const model = makeModel();
+    const query = mockQuery([{ _id: '3' }]);
+    model.find.mockReturnValue(query);
+    model.countDocuments.mockResolvedValue(21);
+    const controller = new BaseController(model, ['name']);
+    const req = { query: { page: '3', limit: '10' } } as unknown as Request;
+    const res = mockRes();
+
+    await controller.list(req, res);
+
+    expect(query.skip).toHaveBeenCalledWith(20);
+    expect(query.limit).toHaveBeenCalledWith(10);
+    expect(model.countDocuments).toHaveBeenCalledWith({});
+    expect(res.send).toHaveBeenCalledWith({
+      message: 'Documents retrieved successfully',
+      data: [{ _id: '3' }],
+      total: 21,
+      page: 3,
+      limit: 10,
+    });
+  });
+
+  it('caps an oversized ?limit at 100', async () => {
+    const model = makeModel();
+    const query = mockQuery([]);
+    model.find.mockReturnValue(query);
+    model.countDocuments.mockResolvedValue(0);
+    const controller = new BaseController(model, ['name']);
+    const req = { query: { page: '1', limit: '5000' } } as unknown as Request;
+    const res = mockRes();
+
+    await controller.list(req, res);
+
+    expect(query.limit).toHaveBeenCalledWith(100);
+  });
+
+  it.each([
+    [{ page: '0', limit: '10' }],
+    [{ page: '1', limit: '0' }],
+    [{ page: '1.5', limit: '10' }],
+    [{ page: '1' }],
+    [{ limit: '10' }],
+    [{ page: 'nope', limit: 'nope' }],
+  ])(
+    'falls back to unpaginated behavior for invalid/partial query %j',
+    async (queryParams) => {
+      const model = makeModel();
+      model.find.mockResolvedValue([{ _id: '1' }]);
+      const controller = new BaseController(model, ['name']);
+      const req = { query: queryParams } as unknown as Request;
+      const res = mockRes();
+
+      await controller.list(req, res);
+
+      expect(model.countDocuments).not.toHaveBeenCalled();
+      expect(res.send).toHaveBeenCalledWith(
+        expect.objectContaining({ total: 1 })
+      );
+    }
+  );
+
+  it('applies listSelect() to every list() query', async () => {
+    class SelectController extends BaseController {
+      protected listSelect() {
+        return '-secret';
+      }
+    }
+    const model = makeModel();
+    const query = mockQuery([{ _id: '1' }]);
+    model.find.mockReturnValue(query);
+    const controller = new SelectController(model, ['name']);
+    const req = { query: {} } as unknown as Request;
+    const res = mockRes();
+
+    await controller.list(req, res);
+
+    expect(query.select).toHaveBeenCalledWith('-secret');
+  });
+
+  it('applies transformListDoc() to every returned document', async () => {
+    class TransformController extends BaseController {
+      protected transformListDoc(doc: any) {
+        return { ...doc, redacted: true };
+      }
+    }
+    const model = makeModel();
+    model.find.mockResolvedValue([{ _id: '1' }, { _id: '2' }]);
+    const controller = new TransformController(model, ['name']);
+    const req = { query: {} } as unknown as Request;
+    const res = mockRes();
+
+    await controller.list(req, res);
+
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: [
+          { _id: '1', redacted: true },
+          { _id: '2', redacted: true },
+        ],
+      })
+    );
+  });
+
+  it('short-circuits without querying when buildListFilter() returns null', async () => {
+    class GatedController extends BaseController {
+      protected async buildListFilter(_req: Request, res: Response) {
+        res.status(401).send({ message: 'nope' });
+        return null;
+      }
+    }
+    const model = makeModel();
+    const controller = new GatedController(model, ['name']);
+    const req = { query: {} } as unknown as Request;
+    const res = mockRes();
+
+    await controller.list(req, res);
+
+    expect(model.find).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(401);
   });
 });

@@ -321,6 +321,16 @@ describe('PaymentController.confirmRefund', () => {
 });
 
 describe('PaymentController.list', () => {
+  it('returns 401 when there is no authenticated user', async () => {
+    const req = { meta: {} } as unknown as Request;
+    const res = mockRes();
+
+    await paymentController.list(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(mockFind).not.toHaveBeenCalled();
+  });
+
   it('scopes a non-ADMIN caller to their own payments', async () => {
     mockFind.mockResolvedValue([]);
     const res = mockRes();
@@ -337,5 +347,53 @@ describe('PaymentController.list', () => {
     await paymentController.list(adminReq(), res);
 
     expect(mockFind).toHaveBeenCalledWith({});
+  });
+});
+
+describe('PaymentController.getById', () => {
+  it('returns 401 when there is no authenticated user', async () => {
+    const req = { meta: {}, params: { _id: '1' } } as unknown as Request;
+    const res = mockRes();
+
+    await paymentController.getById(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(mockFindById).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 when the payment does not exist', async () => {
+    mockFindById.mockResolvedValue(null);
+    const res = mockRes();
+
+    await paymentController.getById(retailerReq(), res);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+  });
+
+  it('returns 403 when a non-ADMIN caller requests a payment they do not own', async () => {
+    mockFindById.mockResolvedValue({ user_ref: 'someone-else' });
+    const res = mockRes();
+
+    await paymentController.getById(retailerReq(), res);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+  });
+
+  it('returns the payment for its owner', async () => {
+    mockFindById.mockResolvedValue({ user_ref: 'retailer-1' });
+    const res = mockRes();
+
+    await paymentController.getById(retailerReq(), res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('lets ADMIN fetch any payment', async () => {
+    mockFindById.mockResolvedValue({ user_ref: 'someone-else' });
+    const res = mockRes();
+
+    await paymentController.getById(adminReq(), res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
   });
 });

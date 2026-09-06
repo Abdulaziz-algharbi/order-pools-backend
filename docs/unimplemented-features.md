@@ -132,7 +132,7 @@ The old doc's §7 and §8 were two views of the same gap (no `SupplierRequest` e
 
 ## 11. Cross-Cutting Gaps
 
-- **No generic query filtering.** `BaseController.list()` still calls `this.model.find()` with no arguments and never reads `req.query`. Every controller that needs role-based scoping has grown its own bespoke `list()` override (11+ of them now, all hand-rolled and slightly different) rather than there being one reusable filter-building mechanism — this works but means every future "filter list X by Y" requirement is still its own from-scratch override, and there's still no way for a client to ask for e.g. `GET /offers?status=PENDING` on top of the role scoping that already exists.
+- **Resolved from the old snapshot.** `BaseController.list()` is now the single place list() lives — every subclass that used to reimplement the full try/catch/response-formatting boilerplate now only overrides `buildListFilter(req, res)` (role-scoped filter, or `null` after sending its own response, e.g. a 401), and optionally `listSelect()` (a projection, e.g. `UsersController`'s `-password`) or `transformListDoc(doc, req)` (per-document post-processing, e.g. `NotificationController`'s recipient-redaction). Pagination is opt-in via `?page`/`?limit` (both required, positive integers, `limit` capped at 100) — a caller that omits them gets today's unbounded behavior unchanged, so every existing caller keeps working. There is still no arbitrary client-side field filter (e.g. `GET /offers?status=PENDING` beyond the role scoping) — that would need each `buildListFilter()` to merge in caller-supplied query params, which none do yet.
 - **Auth is now broad but not universal.** `tokenMiddleware`/`requireRole` cover essentially the whole API except `payments` and `supplier.payouts` (§1) — a major change from the old snapshot ("almost no route has auth"), but those two remaining modules are a real, currently-exploitable gap, not a rounding error.
 - **No multi-document transactions anywhere.** Still true. The pool-join guard (§3) works around this for its one case using a single-document atomic `findOneAndUpdate` with an `$expr` filter + aggregation-pipeline update — a real, working pattern now available to copy for similar problems — but it only solves single-document atomicity. Multi-document admin actions this spec still calls for (approve offer → create Pool; delivery reaches DELIVERED → pool COMPLETED) still have no session/transaction to build on, and the local dev `docker-compose.yml` runs a standalone `mongo:6` (no replica set), which doesn't support multi-document transactions at all without also changing the deployment topology — worth deciding deliberately before this is needed, not assuming it'll just work.
 
@@ -170,7 +170,7 @@ Still missing (confirmed still true, re-verified against current code):
 - Auth/authz entirely absent on payments and supplier.payouts (the most exposed modules in the API today)
 - Approve-offer workflow that atomically creates the Pool (still two uncoordinated calls)
 - Request-negotiation / reject-offer dedicated actions + supplier notifications
-- Generic query filtering/pagination on list() (still per-controller bespoke overrides, no shared mechanism, no arbitrary client-side filters e.g. ?status=)
+- Arbitrary client-side list() filters (e.g. `?status=`) beyond role scoping — `buildListFilter()` gives every controller one place to add this, but none do yet
 - SUPPLIER-visible "participants of my own pool" listing (admin-only and self-only today)
 - TARGET_REACHED -> DISTRIBUTING -> COMPLETED pool transitions (delivery creation/completion doesn't move Pool.status)
 - Notification on delivery status change post-assignment (PENDING -> DELIVERING -> DELIVERED)
@@ -188,7 +188,6 @@ Needs controller/service:
 - Pool: participants-by-pool listing for the owning SUPPLIER; TARGET_REACHED->DISTRIBUTING->COMPLETED transition logic
 - Complaint: add message; classify fault
 - Payments / SupplierPayouts: any business logic and auth at all (currently bare CRUD)
-- Cross-cutting: a reusable query-filter mechanism for BaseController.list (or a documented override pattern) so future filters aren't all bespoke
 
 Needs route:
 - POST /offers/:id/approve, /offers/:id/negotiate, /offers/:id/reject

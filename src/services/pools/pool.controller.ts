@@ -24,36 +24,24 @@ class PoolController extends BaseController {
   // from their own offers, regardless of status — a dual-role account
   // holding both gets the union of the two, matching access to both
   // panels. ADMIN sees every pool outright.
-  async list(req: Request, res: Response): Promise<void> {
-    try {
-      const user = req.meta?.user;
+  protected async buildListFilter(
+    req: Request,
+    _res: Response
+  ): Promise<Record<string, unknown> | null> {
+    const user = req.meta?.user;
 
-      let filter: Record<string, unknown>;
-      if (user?.roles.includes('ADMIN')) {
-        filter = {};
-      } else {
-        const conditions: Record<string, unknown>[] = [];
-        if (!user || user.roles.includes('RETAILER')) {
-          conditions.push({ status: 'OPEN' });
-        }
-        if (user?.roles.includes('SUPPLIER')) {
-          conditions.push({
-            productoffer_ref: { $in: await this.ownOfferIds(user.userId) },
-          });
-        }
-        filter = conditions.length > 1 ? { $or: conditions } : conditions[0];
-      }
+    if (user?.roles.includes('ADMIN')) return {};
 
-      const docs = await this.model.find(filter);
-      this.logger.info(`${this.model.modelName} Retrieved`);
-      res.status(200).send({
-        message: 'Documents retrieved successfully',
-        data: docs,
-        total: docs.length,
-      });
-    } catch (error) {
-      this.errorHandler(error, req, res);
+    const conditions: Record<string, unknown>[] = [];
+    if (!user || user.roles.includes('RETAILER')) {
+      conditions.push({ status: 'OPEN' });
     }
+    if (user?.roles.includes('SUPPLIER')) {
+      conditions.push({
+        productoffer_ref: { $in: await this.ownOfferIds(user.userId) },
+      });
+    }
+    return conditions.length > 1 ? { $or: conditions } : conditions[0];
   }
 
   // Same visibility rule as list(), applied to a single document.

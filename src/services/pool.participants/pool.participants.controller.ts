@@ -241,32 +241,25 @@ class PoolParticipantController extends BaseController {
   // Admin sees every participant (optionally narrowed to one pool via
   // ?pool_ref=... to see everyone in a given pool); anyone else only sees
   // their own participations.
-  async list(req: Request, res: Response): Promise<void> {
-    try {
-      const user = req.meta.user;
-      if (!user) {
-        res.status(401).send({ message: 'Access token is missing' });
-        return;
-      }
-
-      const filter: Record<string, unknown> = user.roles.includes('ADMIN')
-        ? {}
-        : { user_ref: user.userId };
-
-      if (req.query.pool_ref) {
-        filter.pool_ref = req.query.pool_ref;
-      }
-
-      const docs = await this.model.find(filter);
-      this.logger.info(`${this.model.modelName} Retrieved`);
-      res.status(200).send({
-        message: 'Documents retrieved successfully',
-        data: docs,
-        total: docs.length,
-      });
-    } catch (error) {
-      this.errorHandler(error, req, res);
+  protected async buildListFilter(
+    req: Request,
+    res: Response
+  ): Promise<Record<string, unknown> | null> {
+    const user = req.meta.user;
+    if (!user) {
+      res.status(401).send({ message: 'Access token is missing' });
+      return null;
     }
+
+    const filter: Record<string, unknown> = user.roles.includes('ADMIN')
+      ? {}
+      : { user_ref: user.userId };
+
+    if (req.query.pool_ref) {
+      filter.pool_ref = req.query.pool_ref;
+    }
+
+    return filter;
   }
 
   // Same visibility rule as list(), applied to a single document.
