@@ -1,8 +1,12 @@
 import { Request, Response } from 'express';
 import BaseController from '../base/base.controller';
 import ERRORS from '../../constants/ERRORS';
+import config from '../../config/config';
 import poolModel from '../pools/pool.model';
 import userModel from '../users/user.model';
+import productOfferModel from '../product.offers/product.offer.model';
+import paymentModel from '../payments/payment.model';
+import thawaniGateway from '../thawani/thawani.gateway';
 import poolParticipantModel, { couldBeUpdated } from './pool.participant.model';
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -13,11 +17,34 @@ class PoolParticipantController extends BaseController {
     this.logger.info('PoolParticipant initialized');
   }
 
+  // Releases a quantity reservation back onto a still-OPEN pool (see
+  // create()'s atomic claim) — used both by the rollback path here and by
+  // delete() when a participant withdraws before the pool concludes.
+  // remainingWasZero indicates the reservation had flipped the pool to
+  // TARGET_REACHED, which must be reverted back to OPEN along with it.
+  private async releaseReservation(
+    poolId: string,
+    quantity: number,
+    remainingWasZero: boolean
+  ) {
+    await poolModel.updateOne(
+      { _id: poolId },
+      remainingWasZero
+        ? { $inc: { currentQuantity: quantity }, $set: { status: 'OPEN' } }
+        : { $inc: { currentQuantity: quantity } }
+    );
+  }
+
   // A participant is always the authenticated caller (RETAILER, enforced
   // by requireRole on the route) — never whatever user_ref the client
   // sends. The chosen address must be one of that user's own addresses,
   // which is a cross-document check a Mongoose/Zod validator can't
   // express, so it lives here rather than in the schema.
+  //
+  // Joining now means: reserve the quantity (as before), then create a
+  // Payment + Thawani checkout session for the retailer's contribution —
+  // the participant starts PENDING_PAYMENT and is only usable once
+  // PaymentController.confirm() sees Thawani report the session paid.
   async create(req: Request, res: Response): Promise<void> {
     try {
       const caller = req.meta.user;
@@ -141,22 +168,70 @@ class PoolParticipantController extends BaseController {
         return;
       }
 
+      const remainingWasZero = remainingAfter === 0;
+      let paymentId: string | undefined;
+
       try {
-        const participant = new this.model(req.body);
-        const saved = await participant.save();
+        // The retailer's contribution, computed server-side — never
+        // trusted from the client.
+        const amount = quantity * pool.pricePerUnit;
+
+        // `new Model()` assigns `_id` locally without hitting the DB, so
+        // it's available as Thawani's client_reference_id before the
+        // payment doc (which needs the session id it returns) is saved.
+        const payment = new paymentModel({
+          pool_ref,
+          user_ref,
+          amount,
+          thawaniSessionId: 'pending',
+        });
+        paymentId = payment._id.toString();
+
+        const offer = await productOfferModel.findById(pool.productoffer_ref);
+
+        const session = await thawaniGateway.createCheckoutSession({
+          clientReferenceId: paymentId,
+          products: [
+            {
+              name: offer?.name ?? 'OrderPools contribution',
+              quantity,
+              unit_amount: Math.round(pool.pricePerUnit * 1000),
+            },
+          ],
+          successUrl: `${config.frontendUrl}/payments/${paymentId}/result?outcome=success`,
+          cancelUrl: `${config.frontendUrl}/payments/${paymentId}/result?outcome=cancelled`,
+        });
+
+        payment.thawaniSessionId = session.session_id;
+        await payment.save();
+
+        const participant = new this.model({
+          ...req.body,
+          payment_ref: payment._id,
+        });
+        const savedParticipant = await participant.save();
+
         this.logger.info(`${this.model.modelName} created`);
-        res.status(201).send(saved);
-      } catch (participantError) {
-        // Roll back the reservation made above since no participant was
-        // actually created to consume it — including the TARGET_REACHED
-        // flip, if this join was the one that emptied the pool.
-        await poolModel.updateOne(
-          { _id: pool_ref },
-          remainingAfter === 0
-            ? { $inc: { currentQuantity: quantity }, $set: { status: 'OPEN' } }
-            : { $inc: { currentQuantity: quantity } }
-        );
-        throw participantError;
+        res.status(201).send({
+          message: 'Document created successfully',
+          data: savedParticipant,
+          payment: {
+            _id: payment._id,
+            amount: payment.amount,
+            status: payment.status,
+          },
+          checkoutUrl: thawaniGateway.checkoutUrl(session.session_id),
+        });
+      } catch (innerError) {
+        // Nothing downstream of the reservation succeeded (or the
+        // participant itself failed to save) — release it, and don't
+        // leave an orphaned Payment doc behind with no participant to
+        // point at.
+        await this.releaseReservation(pool_ref, quantity, remainingWasZero);
+        if (paymentId) {
+          await paymentModel.deleteOne({ _id: paymentId });
+        }
+        throw innerError;
       }
     } catch (error) {
       this.errorHandler(error, req, res);
@@ -226,56 +301,15 @@ class PoolParticipantController extends BaseController {
     }
   }
 
-  // A retailer may only edit their own participant, and only while the
-  // pool is still OPEN (collecting contributions) — once it moves past
-  // that (target reached / distributing / completed / cancelled), the
-  // participation is locked.
-  async update(req: Request, res: Response): Promise<void> {
-    try {
-      const user = req.meta.user;
-      if (!user) {
-        res.status(401).send({ message: 'Access token is missing' });
-        return;
-      }
-
-      const participant = await this.model.findById(req.params._id);
-      if (!participant) {
-        res.status(404).send({ message: 'Document not Found', data: null });
-        return;
-      }
-
-      if (participant.user_ref.toString() !== user.userId) {
-        res.status(403).send({ message: ERRORS.UNAUTHORIZED });
-        return;
-      }
-
-      const pool = await poolModel.findById(participant.pool_ref);
-      if (!pool) {
-        res.status(404).send({ message: 'Pool not found' });
-        return;
-      }
-
-      if (pool.status !== 'OPEN') {
-        res.status(409).send({
-          message:
-            'Participation can only be updated while the pool is still open',
-        });
-        return;
-      }
-
-      await super.update(req, res);
-    } catch (error) {
-      this.errorHandler(error, req, res);
-    }
-  }
-
   // A retailer may only remove their own participant. Allowed while the
-  // pool is still OPEN (backing out before it commits), once the pool is
-  // COMPLETED (fully delivered), or once it's been CANCELLED for at least
-  // 7 days (a grace period, e.g. for refund/dispute handling, measured
-  // from Pool.updatedAt — the pool has no dedicated cancelledAt field).
-  // Any other pool status (TARGET_REACHED / DISTRIBUTING, or a CANCELLED
-  // pool still inside the 7-day window) blocks deletion.
+  // pool is still OPEN (backing out before it commits — releases the
+  // quantity reservation, and either voids a not-yet-paid Payment or
+  // refunds an already-COMPLETED one), once the pool is COMPLETED (fully
+  // delivered), or once it's been CANCELLED for at least 7 days (a grace
+  // period, e.g. for refund/dispute handling, measured from Pool.updatedAt
+  // — the pool has no dedicated cancelledAt field). Any other pool status
+  // (TARGET_REACHED / DISTRIBUTING, or a CANCELLED pool still inside the
+  // 7-day window) blocks deletion.
   async delete(req: Request, res: Response): Promise<void> {
     try {
       const user = req.meta.user;
@@ -316,6 +350,39 @@ class PoolParticipantController extends BaseController {
             'Participation can only be removed while the pool is open, once it is completed, or 7 days after it was cancelled',
         });
         return;
+      }
+
+      // Withdrawing from a still-collecting pool frees the quantity this
+      // participant was holding, and settles whatever became of their
+      // Payment — the Payment record itself is never deleted, only ever
+      // transitioned, so it stays as a permanent record either way.
+      if (pool.status === 'OPEN') {
+        await this.releaseReservation(
+          pool._id.toString(),
+          participant.quantity,
+          false
+        );
+
+        const payment = await paymentModel.findById(participant.payment_ref);
+        if (payment?.status === 'PENDING') {
+          payment.status = 'FAILED';
+          await payment.save();
+        } else if (payment?.status === 'COMPLETED') {
+          try {
+            const refund = await thawaniGateway.createRefund({
+              paymentId: payment.thawaniPaymentId ?? payment._id.toString(),
+              reason: 'Retailer withdrew from the pool',
+            });
+            payment.status = 'REFUND_PENDING';
+            payment.thawaniRefundId = refund.refund_id ?? null;
+          } catch (refundError) {
+            this.logger.error(
+              `Refund request failed for payment ${payment._id} on withdrawal: ${refundError}`
+            );
+            payment.status = 'REFUND_FAILED';
+          }
+          await payment.save();
+        }
       }
 
       await super.delete(req, res);

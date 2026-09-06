@@ -1,7 +1,12 @@
 import { Request, Response } from 'express';
 import BaseController from '../base/base.controller';
 import ERRORS from '../../constants/ERRORS';
-import EVENTS, { DeliveryAssignedEvent } from '../../constants/EVENTS';
+import EVENTS, {
+  DeliveryAssignedEvent,
+  PaymentCompletedEvent,
+  PaymentFailedEvent,
+  PaymentRefundedEvent,
+} from '../../constants/EVENTS';
 import poolModel from '../pools/pool.model';
 import productOfferModel from '../product.offers/product.offer.model';
 import poolParticipantModel from '../pool.participants/pool.participant.model';
@@ -234,6 +239,66 @@ class NotificationController extends BaseController {
           // delivery itself already succeeded and must not be affected).
           this.logger.error(
             `${EVENTS.DELIVERY_ASSIGNED} notification failed: ${error}`
+          );
+        }
+      }
+    );
+
+    this.broker.on(
+      EVENTS.PAYMENT_COMPLETED,
+      async (event: PaymentCompletedEvent) => {
+        try {
+          await this.notify({
+            recipientIds: [event.userId],
+            type: 'PAYMENT_COMPLETED',
+            title: 'Payment confirmed',
+            message:
+              'Your payment was confirmed and your participation is locked in.',
+            actionUrl: `/participants/${event.poolParticipantId}`,
+            priority: 'NORMAL',
+          });
+        } catch (error) {
+          this.logger.error(
+            `${EVENTS.PAYMENT_COMPLETED} notification failed: ${error}`
+          );
+        }
+      }
+    );
+
+    this.broker.on(EVENTS.PAYMENT_FAILED, async (event: PaymentFailedEvent) => {
+      try {
+        await this.notify({
+          recipientIds: [event.userId],
+          type: 'PAYMENT_FAILED',
+          title: 'Payment not completed',
+          message:
+            'Your payment was not completed, so you were not added to the pool.',
+          actionUrl: `/payments/${event.paymentId}`,
+          priority: 'NORMAL',
+        });
+      } catch (error) {
+        this.logger.error(
+          `${EVENTS.PAYMENT_FAILED} notification failed: ${error}`
+        );
+      }
+    });
+
+    this.broker.on(
+      EVENTS.PAYMENT_REFUNDED,
+      async (event: PaymentRefundedEvent) => {
+        try {
+          await this.notify({
+            recipientIds: [event.userId],
+            type: 'PAYMENT_REFUNDED',
+            title: 'Payment refunded',
+            message:
+              'The pool you joined did not reach its target, and your payment has been refunded.',
+            actionUrl: `/payments/${event.paymentId}`,
+            priority: 'NORMAL',
+          });
+        } catch (error) {
+          this.logger.error(
+            `${EVENTS.PAYMENT_REFUNDED} notification failed: ${error}`
           );
         }
       }

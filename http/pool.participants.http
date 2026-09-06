@@ -1,16 +1,20 @@
 @baseUrl=http://localhost:8000/api/v1/participants
 @poolParticipantId=REPLACE_WITH_POOL_PARTICIPANT_ID
 @poolId=REPLACE_WITH_POOL_ID
-@paymentId=REPLACE_WITH_PAYMENT_ID
 @addressId=REPLACE_WITH_RETAILER_OWN_ADDRESS_ID
 @accessToken=REPLACE_WITH_RETAILER_ACCESS_TOKEN
 
 # See 00-smooth-flow.http for a chained run that creates a real pool/
-# payment/address/token end to end instead of hand-editing the
-# placeholders above. Note address_ref must be one of the caller's own
-# addresses (checked server-side) — it can't just be any address id.
+# address/token end to end instead of hand-editing the placeholders above.
+# Note address_ref must be one of the caller's own addresses (checked
+# server-side) — it can't just be any address id.
 
-### create poolParticipant (RETAILER only — user_ref is derived from the token, not sent)
+### join a pool (RETAILER only — user_ref is derived from the token, not
+### sent). No payment_ref: the backend computes the contribution amount,
+### creates the Payment (PENDING) and a Thawani checkout session itself,
+### and returns the checkoutUrl to redirect the retailer to. The
+### participant starts PENDING_PAYMENT — see payments.http for confirming
+### it once the retailer pays.
 
 POST {{baseUrl}}
 Content-Type: application/json
@@ -18,7 +22,6 @@ Authorization: Bearer {{accessToken}}
 
 {
     "pool_ref": "{{poolId}}",
-    "payment_ref": "{{paymentId}}",
     "address_ref": "{{addressId}}",
     "quantity": 15
 }
@@ -38,17 +41,13 @@ Authorization: Bearer {{accessToken}}
 GET {{baseUrl}}/{{poolParticipantId}}
 Authorization: Bearer {{accessToken}}
 
-### update poolParticipant (RETAILER, own participant only, only while the pool is still OPEN)
+# No PATCH — quantity is no longer editable after joining (it's what the
+# Thawani checkout session was priced against). Withdraw and rejoin instead.
 
-PATCH {{baseUrl}}/{{poolParticipantId}}
-Content-Type: application/json
-Authorization: Bearer {{accessToken}}
-
-{
-    "quantity": 12
-}
-
-### delete poolParticipant (RETAILER, own participant only — pool OPEN, COMPLETED, or CANCELLED 7+ days ago)
+### withdraw (RETAILER, own participant only — pool OPEN, COMPLETED, or
+### CANCELLED 7+ days ago). While the pool is still OPEN this releases the
+### claimed quantity and either voids a not-yet-paid Payment or requests a
+### Thawani refund of an already-COMPLETED one.
 
 DELETE {{baseUrl}}/{{poolParticipantId}}
 Authorization: Bearer {{accessToken}}

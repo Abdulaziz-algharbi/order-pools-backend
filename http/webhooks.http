@@ -1,0 +1,21 @@
+@baseUrl=http://localhost:8000/api/v1/webhooks
+@paymentId=REPLACE_WITH_PAYMENT_ID
+
+# No auth — this is what Thawani itself calls, configured as a callback
+# URL in the Thawani merchant dashboard. The payload is never trusted
+# directly (see thawani.webhook.controller.ts) — it only triggers a fresh,
+# authenticated GET against Thawani for whichever payment the reference id
+# points at. Useful for manually simulating a webhook call locally instead
+# of exposing this server to the internet during development.
+
+### simulate a Thawani webhook call
+
+POST {{baseUrl}}/thawani
+Content-Type: application/json
+
+{
+  "data": {
+    "client_reference_id": "{{paymentId}}",
+    "payment_status": "paid"
+  }
+}

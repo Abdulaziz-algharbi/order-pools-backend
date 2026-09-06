@@ -15,6 +15,10 @@ interface IConfig {
   smtpPort?: number;
   smtpUser?: string;
   smtpPass?: string;
+  thawaniSecretKey: string;
+  thawaniPublishableKey: string;
+  thawaniApiBaseUrl: string;
+  thawaniCheckoutBaseUrl: string;
 }
 
 const config = {
@@ -35,6 +39,12 @@ const config = {
     : undefined,
   smtpUser: process.env.SMTP_USER,
   smtpPass: process.env.SMTP_PASS,
+  thawaniSecretKey: process.env.THAWANI_SECRET_KEY || '',
+  thawaniPublishableKey: process.env.THAWANI_PUBLISHABLE_KEY || '',
+  thawaniApiBaseUrl:
+    process.env.THAWANI_API_BASE_URL || 'https://uatcheckout.thawani.om/api/v1',
+  thawaniCheckoutBaseUrl:
+    process.env.THAWANI_CHECKOUT_BASE_URL || 'https://uatcheckout.thawani.om',
 } as IConfig;
 
 export default config;

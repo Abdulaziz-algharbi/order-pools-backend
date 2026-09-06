@@ -57,7 +57,6 @@ describe('pool.participants routes reject SUPPLIER', () => {
     ['GET', '/'],
     ['POST', '/'],
     ['GET', '/:_id'],
-    ['PATCH', '/:_id'],
     ['DELETE', '/:_id'],
   ])(
     'rejects an authenticated SUPPLIER on %s %s with 403 before the controller runs',

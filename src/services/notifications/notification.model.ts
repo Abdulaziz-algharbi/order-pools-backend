@@ -1,7 +1,11 @@
 import { Document, Schema, Types, model } from 'mongoose';
 
 // Extend this as new triggers are wired up (see NotificationController.listeners()).
-export type NotificationType = 'DELIVERY_ASSIGNED';
+export type NotificationType =
+  | 'DELIVERY_ASSIGNED'
+  | 'PAYMENT_COMPLETED'
+  | 'PAYMENT_FAILED'
+  | 'PAYMENT_REFUNDED';
 
 export interface NotificationRecipient {
   user_ref: Types.ObjectId;
@@ -53,7 +57,12 @@ const notificationSchema = new Schema<Notification>(
     },
     type: {
       type: String,
-      enum: ['DELIVERY_ASSIGNED'],
+      enum: [
+        'DELIVERY_ASSIGNED',
+        'PAYMENT_COMPLETED',
+        'PAYMENT_FAILED',
+        'PAYMENT_REFUNDED',
+      ],
       required: true,
     },
     title: {

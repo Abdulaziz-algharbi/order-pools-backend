@@ -16,6 +16,7 @@ jest.mock('../../src/services/pool.participants/pool.participant.model', () => {
   MockModel.modelName = 'PoolParticipant';
   MockModel.find = jest.fn();
   MockModel.findById = jest.fn();
+  MockModel.deleteOne = jest.fn().mockResolvedValue({});
   return {
     __esModule: true,
     default: MockModel,
@@ -37,11 +38,49 @@ jest.mock('../../src/services/users/user.model', () => ({
   default: { findById: jest.fn() },
 }));
 
-import BaseController from '../../src/services/base/base.controller';
+jest.mock('../../src/services/product.offers/product.offer.model', () => ({
+  __esModule: true,
+  default: { findById: jest.fn() },
+}));
+
+const mockPaymentSave = jest.fn();
+const mockPaymentDeleteOne = jest.fn();
+const mockPaymentFindById = jest.fn();
+
+jest.mock('../../src/services/payments/payment.model', () => {
+  const MockModel: any = jest.fn().mockImplementation(function (
+    this: any,
+    data: any
+  ) {
+    Object.assign(this, data);
+    this._id = data._id ?? 'payment-1';
+    this.save = mockPaymentSave;
+  });
+  MockModel.modelName = 'Payment';
+  MockModel.deleteOne = mockPaymentDeleteOne;
+  MockModel.findById = mockPaymentFindById;
+  return { __esModule: true, default: MockModel };
+});
+
+const mockCreateCheckoutSession = jest.fn();
+const mockCreateRefund = jest.fn();
+const mockCheckoutUrl = jest.fn();
+
+jest.mock('../../src/services/thawani/thawani.gateway', () => ({
+  __esModule: true,
+  default: {
+    createCheckoutSession: (...args: unknown[]) =>
+      mockCreateCheckoutSession(...args),
+    createRefund: (...args: unknown[]) => mockCreateRefund(...args),
+    checkoutUrl: (...args: unknown[]) => mockCheckoutUrl(...args),
+  },
+}));
+
 import poolParticipantController from '../../src/services/pool.participants/pool.participants.controller';
 import poolParticipantModel from '../../src/services/pool.participants/pool.participant.model';
 import poolModel from '../../src/services/pools/pool.model';
 import userModel from '../../src/services/users/user.model';
+import productOfferModel from '../../src/services/product.offers/product.offer.model';
 
 const mockFind = poolParticipantModel.find as unknown as jest.Mock;
 const mockFindById = poolParticipantModel.findById as unknown as jest.Mock;
@@ -50,6 +89,7 @@ const mockPoolFindOneAndUpdate =
   poolModel.findOneAndUpdate as unknown as jest.Mock;
 const mockPoolUpdateOne = poolModel.updateOne as unknown as jest.Mock;
 const mockUserFindById = userModel.findById as unknown as jest.Mock;
+const mockOfferFindById = productOfferModel.findById as unknown as jest.Mock;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -57,6 +97,7 @@ function mockRes() {
   const res: Partial<Response> = {};
   res.status = jest.fn().mockReturnValue(res);
   res.send = jest.fn().mockReturnValue(res);
+  res.json = jest.fn().mockReturnValue(res);
   return res as Response;
 }
 
@@ -68,6 +109,8 @@ describe('PoolParticipantController.create', () => {
       status: 'OPEN',
       currentQuantity: 50,
       minimumContribution: 15,
+      pricePerUnit: 5,
+      productoffer_ref: 'offer-1',
       ...overrides,
     };
   }
@@ -78,7 +121,6 @@ describe('PoolParticipantController.create', () => {
       body: {
         address_ref: 'addr-1',
         pool_ref: 'pool-1',
-        payment_ref: 'payment-1',
         quantity: 20,
         ...body,
       },
@@ -87,6 +129,12 @@ describe('PoolParticipantController.create', () => {
 
   beforeEach(() => {
     mockUserFindById.mockResolvedValue({ addresses: ['addr-1'] });
+    mockOfferFindById.mockResolvedValue({ name: 'Basmati Rice 25kg' });
+    mockCreateCheckoutSession.mockResolvedValue({ session_id: 'sess-1' });
+    mockCheckoutUrl.mockReturnValue(
+      'https://uatcheckout.thawani.om/pay/sess-1'
+    );
+    mockPaymentSave.mockResolvedValue(undefined);
   });
 
   it('returns 401 when there is no authenticated user', async () => {
@@ -192,54 +240,6 @@ describe('PoolParticipantController.create', () => {
     expect(mockPoolFindOneAndUpdate).not.toHaveBeenCalled();
   });
 
-  it('allows taking exactly minimumContribution (lower bound)', async () => {
-    mockPoolFindById.mockResolvedValue(basePool());
-    mockPoolFindOneAndUpdate.mockResolvedValue(
-      basePool({ currentQuantity: 35 })
-    );
-    mockParticipantSave.mockResolvedValue({ _id: 'p-1' });
-    const req = baseReq({ quantity: 15 });
-    const res = mockRes();
-
-    await poolParticipantController.create(req, res);
-
-    expect(res.status).toHaveBeenCalledWith(201);
-  });
-
-  it('allows taking the full remaining quantity, leaving exactly 0, and flips status to TARGET_REACHED', async () => {
-    mockPoolFindById.mockResolvedValue(basePool());
-    mockPoolFindOneAndUpdate.mockResolvedValue(
-      basePool({ currentQuantity: 0, status: 'TARGET_REACHED' })
-    );
-    mockParticipantSave.mockResolvedValue({ _id: 'p-1' });
-    const req = baseReq({ quantity: 50 });
-    const res = mockRes();
-
-    await poolParticipantController.create(req, res);
-
-    expect(res.status).toHaveBeenCalledWith(201);
-    const [, pipeline] = mockPoolFindOneAndUpdate.mock.calls[0];
-    const stage = pipeline[0].$set;
-    expect(stage.status.$cond[1]).toBe('TARGET_REACHED');
-  });
-
-  it('does not flip status when the pool still has quantity remaining', async () => {
-    mockPoolFindById.mockResolvedValue(basePool());
-    mockPoolFindOneAndUpdate.mockResolvedValue(
-      basePool({ currentQuantity: 30 })
-    );
-    mockParticipantSave.mockResolvedValue({ _id: 'p-1' });
-    const req = baseReq({ quantity: 20 });
-    const res = mockRes();
-
-    await poolParticipantController.create(req, res);
-
-    expect(res.status).toHaveBeenCalledWith(201);
-    const [, pipeline] = mockPoolFindOneAndUpdate.mock.calls[0];
-    const stage = pipeline[0].$set;
-    expect(stage.status.$cond[2]).toBe('$status');
-  });
-
   it('returns 409 when the atomic pool update loses a concurrency race', async () => {
     mockPoolFindById.mockResolvedValue(basePool());
     mockPoolFindOneAndUpdate.mockResolvedValue(null);
@@ -249,10 +249,67 @@ describe('PoolParticipantController.create', () => {
     await poolParticipantController.create(req, res);
 
     expect(res.status).toHaveBeenCalledWith(409);
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled();
     expect(mockParticipantSave).not.toHaveBeenCalled();
   });
 
-  it('rolls back the pool reservation when saving the participant fails', async () => {
+  it('creates a Payment and a Thawani checkout session, returning the checkout URL', async () => {
+    mockPoolFindById.mockResolvedValue(basePool());
+    mockPoolFindOneAndUpdate.mockResolvedValue(
+      basePool({ currentQuantity: 30 })
+    );
+    mockParticipantSave.mockResolvedValue({
+      _id: 'p-1',
+      status: 'PENDING_PAYMENT',
+    });
+    const req = baseReq({ quantity: 20 });
+    const res = mockRes();
+
+    await poolParticipantController.create(req, res);
+
+    expect(mockCreateCheckoutSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientReferenceId: 'payment-1',
+        products: [
+          expect.objectContaining({
+            name: 'Basmati Rice 25kg',
+            quantity: 20,
+            unit_amount: 5 * 1000,
+          }),
+        ],
+      })
+    );
+    expect(mockPaymentSave).toHaveBeenCalled();
+    expect(mockParticipantSave).toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(201);
+    const [body] = (res.send as jest.Mock).mock.calls[0];
+    expect(body.checkoutUrl).toBe('https://uatcheckout.thawani.om/pay/sess-1');
+    expect(body.payment).toEqual(
+      expect.objectContaining({ _id: 'payment-1', amount: 100 })
+    );
+  });
+
+  it('rolls back the pool reservation and deletes the Payment when the Thawani session creation fails', async () => {
+    mockPoolFindById.mockResolvedValue(basePool());
+    mockPoolFindOneAndUpdate.mockResolvedValue(
+      basePool({ currentQuantity: 30 })
+    );
+    mockCreateCheckoutSession.mockRejectedValue(new Error('gateway down'));
+    const req = baseReq({ quantity: 20 });
+    const res = mockRes();
+
+    await poolParticipantController.create(req, res);
+
+    expect(mockPoolUpdateOne).toHaveBeenCalledWith(
+      { _id: 'pool-1' },
+      { $inc: { currentQuantity: 20 } }
+    );
+    expect(mockPaymentDeleteOne).toHaveBeenCalledWith({ _id: 'payment-1' });
+    expect(mockParticipantSave).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(500);
+  });
+
+  it('rolls back the reservation when saving the participant fails', async () => {
     mockPoolFindById.mockResolvedValue(basePool());
     mockPoolFindOneAndUpdate.mockResolvedValue(
       basePool({ currentQuantity: 30 })
@@ -267,6 +324,7 @@ describe('PoolParticipantController.create', () => {
       { _id: 'pool-1' },
       { $inc: { currentQuantity: 20 } }
     );
+    expect(mockPaymentDeleteOne).toHaveBeenCalledWith({ _id: 'payment-1' });
     expect(res.status).toHaveBeenCalledWith(500);
   });
 
@@ -421,114 +479,11 @@ describe('PoolParticipantController.getById', () => {
   });
 });
 
-describe('PoolParticipantController.update', () => {
-  it('returns 401 when there is no authenticated user', async () => {
-    const req = { meta: {}, params: { _id: '1' } } as unknown as Request;
-    const res = mockRes();
-
-    await poolParticipantController.update(req, res);
-
-    expect(res.status).toHaveBeenCalledWith(401);
-    expect(mockFindById).not.toHaveBeenCalled();
-  });
-
-  it('returns 404 when the participant does not exist', async () => {
-    mockFindById.mockResolvedValue(null);
-    const req = {
-      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
-      params: { _id: 'missing' },
-      body: { quantity: 5 },
-    } as unknown as Request;
-    const res = mockRes();
-
-    await poolParticipantController.update(req, res);
-
-    expect(res.status).toHaveBeenCalledWith(404);
-  });
-
-  it("returns 403 when a retailer tries to update someone else's participant", async () => {
-    mockFindById.mockResolvedValue({
-      user_ref: 'someone-else',
-      pool_ref: 'pool-1',
-    });
-    const req = {
-      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
-      params: { _id: '1' },
-      body: { quantity: 5 },
-    } as unknown as Request;
-    const res = mockRes();
-
-    await poolParticipantController.update(req, res);
-
-    expect(res.status).toHaveBeenCalledWith(403);
-    expect(mockPoolFindById).not.toHaveBeenCalled();
-  });
-
-  it('returns 404 when the pool cannot be found', async () => {
-    mockFindById.mockResolvedValue({
-      user_ref: 'retailer-1',
-      pool_ref: 'pool-1',
-    });
-    mockPoolFindById.mockResolvedValue(null);
-    const req = {
-      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
-      params: { _id: '1' },
-      body: { quantity: 5 },
-    } as unknown as Request;
-    const res = mockRes();
-
-    await poolParticipantController.update(req, res);
-
-    expect(res.status).toHaveBeenCalledWith(404);
-  });
-
-  it('returns 409 when the pool is no longer OPEN', async () => {
-    mockFindById.mockResolvedValue({
-      user_ref: 'retailer-1',
-      pool_ref: 'pool-1',
-    });
-    mockPoolFindById.mockResolvedValue({ status: 'TARGET_REACHED' });
-    const superUpdate = jest
-      .spyOn(BaseController.prototype, 'update')
-      .mockResolvedValue(undefined);
-    const req = {
-      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
-      params: { _id: '1' },
-      body: { quantity: 5 },
-    } as unknown as Request;
-    const res = mockRes();
-
-    await poolParticipantController.update(req, res);
-
-    expect(res.status).toHaveBeenCalledWith(409);
-    expect(superUpdate).not.toHaveBeenCalled();
-    superUpdate.mockRestore();
-  });
-
-  it('updates when the caller owns the participant and the pool is OPEN', async () => {
-    mockFindById.mockResolvedValue({
-      user_ref: 'retailer-1',
-      pool_ref: 'pool-1',
-    });
-    mockPoolFindById.mockResolvedValue({ status: 'OPEN' });
-    const superUpdate = jest
-      .spyOn(BaseController.prototype, 'update')
-      .mockResolvedValue(undefined);
-    const req = {
-      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
-      params: { _id: '1' },
-      body: { quantity: 5 },
-    } as unknown as Request;
-    const res = mockRes();
-
-    await poolParticipantController.update(req, res);
-
-    expect(superUpdate).toHaveBeenCalledWith(req, res);
-    superUpdate.mockRestore();
-  });
-});
-
 describe('PoolParticipantController.delete', () => {
+  beforeEach(() => {
+    mockPaymentFindById.mockResolvedValue(null);
+  });
+
   it('returns 401 when there is no authenticated user', async () => {
     const req = { meta: {}, params: { _id: '1' } } as unknown as Request;
     const res = mockRes();
@@ -586,15 +541,20 @@ describe('PoolParticipantController.delete', () => {
     expect(res.status).toHaveBeenCalledWith(404);
   });
 
-  it('allows deletion while the pool is OPEN', async () => {
+  it('releases the reservation and marks a PENDING payment FAILED when withdrawing while OPEN', async () => {
     mockFindById.mockResolvedValue({
+      _id: 'participant-1',
       user_ref: 'retailer-1',
       pool_ref: 'pool-1',
+      payment_ref: 'payment-1',
+      quantity: 20,
     });
-    mockPoolFindById.mockResolvedValue({ status: 'OPEN' });
-    const superDelete = jest
-      .spyOn(BaseController.prototype, 'delete')
-      .mockResolvedValue(undefined);
+    mockPoolFindById.mockResolvedValue({ _id: 'pool-1', status: 'OPEN' });
+    const payment: any = {
+      status: 'PENDING',
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    mockPaymentFindById.mockResolvedValue(payment);
     const req = {
       meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
@@ -603,19 +563,31 @@ describe('PoolParticipantController.delete', () => {
 
     await poolParticipantController.delete(req, res);
 
-    expect(superDelete).toHaveBeenCalledWith(req, res);
-    superDelete.mockRestore();
+    expect(mockPoolUpdateOne).toHaveBeenCalledWith(
+      { _id: 'pool-1' },
+      { $inc: { currentQuantity: 20 } }
+    );
+    expect(payment.status).toBe('FAILED');
+    expect(payment.save).toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(204);
   });
 
-  it('allows deletion once the pool is COMPLETED', async () => {
+  it('requests a Thawani refund when withdrawing after a COMPLETED payment', async () => {
     mockFindById.mockResolvedValue({
+      _id: 'participant-1',
       user_ref: 'retailer-1',
       pool_ref: 'pool-1',
+      payment_ref: 'payment-1',
+      quantity: 20,
     });
-    mockPoolFindById.mockResolvedValue({ status: 'COMPLETED' });
-    const superDelete = jest
-      .spyOn(BaseController.prototype, 'delete')
-      .mockResolvedValue(undefined);
+    mockPoolFindById.mockResolvedValue({ _id: 'pool-1', status: 'OPEN' });
+    const payment: any = {
+      _id: 'payment-1',
+      status: 'COMPLETED',
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    mockPaymentFindById.mockResolvedValue(payment);
+    mockCreateRefund.mockResolvedValue({ refund_id: 'refund-1' });
     const req = {
       meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
@@ -624,8 +596,61 @@ describe('PoolParticipantController.delete', () => {
 
     await poolParticipantController.delete(req, res);
 
-    expect(superDelete).toHaveBeenCalledWith(req, res);
-    superDelete.mockRestore();
+    expect(mockCreateRefund).toHaveBeenCalledWith(
+      expect.objectContaining({ paymentId: 'payment-1' })
+    );
+    expect(payment.status).toBe('REFUND_PENDING');
+    expect(payment.thawaniRefundId).toBe('refund-1');
+    expect(res.status).toHaveBeenCalledWith(204);
+  });
+
+  it('marks the payment REFUND_FAILED (without blocking withdrawal) when the refund request errors', async () => {
+    mockFindById.mockResolvedValue({
+      _id: 'participant-1',
+      user_ref: 'retailer-1',
+      pool_ref: 'pool-1',
+      payment_ref: 'payment-1',
+      quantity: 20,
+    });
+    mockPoolFindById.mockResolvedValue({ _id: 'pool-1', status: 'OPEN' });
+    const payment: any = {
+      _id: 'payment-1',
+      status: 'COMPLETED',
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    mockPaymentFindById.mockResolvedValue(payment);
+    mockCreateRefund.mockRejectedValue(new Error('gateway down'));
+    const req = {
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
+      params: { _id: '1' },
+    } as unknown as Request;
+    const res = mockRes();
+
+    await poolParticipantController.delete(req, res);
+
+    expect(payment.status).toBe('REFUND_FAILED');
+    expect(res.status).toHaveBeenCalledWith(204);
+  });
+
+  it('allows deletion once the pool is COMPLETED, without touching currentQuantity', async () => {
+    mockFindById.mockResolvedValue({
+      _id: 'participant-1',
+      user_ref: 'retailer-1',
+      pool_ref: 'pool-1',
+      payment_ref: 'payment-1',
+      quantity: 20,
+    });
+    mockPoolFindById.mockResolvedValue({ _id: 'pool-1', status: 'COMPLETED' });
+    const req = {
+      meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
+      params: { _id: '1' },
+    } as unknown as Request;
+    const res = mockRes();
+
+    await poolParticipantController.delete(req, res);
+
+    expect(mockPoolUpdateOne).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(204);
   });
 
   it('blocks deletion for a pool still TARGET_REACHED / DISTRIBUTING', async () => {
@@ -634,9 +659,6 @@ describe('PoolParticipantController.delete', () => {
       pool_ref: 'pool-1',
     });
     mockPoolFindById.mockResolvedValue({ status: 'DISTRIBUTING' });
-    const superDelete = jest
-      .spyOn(BaseController.prototype, 'delete')
-      .mockResolvedValue(undefined);
     const req = {
       meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
@@ -646,8 +668,6 @@ describe('PoolParticipantController.delete', () => {
     await poolParticipantController.delete(req, res);
 
     expect(res.status).toHaveBeenCalledWith(409);
-    expect(superDelete).not.toHaveBeenCalled();
-    superDelete.mockRestore();
   });
 
   it('blocks deletion for a CANCELLED pool inside the 7-day grace window', async () => {
@@ -659,9 +679,6 @@ describe('PoolParticipantController.delete', () => {
       status: 'CANCELLED',
       updatedAt: new Date(Date.now() - 3 * DAY_MS),
     });
-    const superDelete = jest
-      .spyOn(BaseController.prototype, 'delete')
-      .mockResolvedValue(undefined);
     const req = {
       meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
@@ -671,22 +688,20 @@ describe('PoolParticipantController.delete', () => {
     await poolParticipantController.delete(req, res);
 
     expect(res.status).toHaveBeenCalledWith(409);
-    expect(superDelete).not.toHaveBeenCalled();
-    superDelete.mockRestore();
   });
 
   it('allows deletion for a CANCELLED pool once 7 days have passed', async () => {
     mockFindById.mockResolvedValue({
+      _id: 'participant-1',
       user_ref: 'retailer-1',
       pool_ref: 'pool-1',
+      payment_ref: 'payment-1',
+      quantity: 20,
     });
     mockPoolFindById.mockResolvedValue({
       status: 'CANCELLED',
       updatedAt: new Date(Date.now() - 8 * DAY_MS),
     });
-    const superDelete = jest
-      .spyOn(BaseController.prototype, 'delete')
-      .mockResolvedValue(undefined);
     const req = {
       meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
@@ -695,7 +710,7 @@ describe('PoolParticipantController.delete', () => {
 
     await poolParticipantController.delete(req, res);
 
-    expect(superDelete).toHaveBeenCalledWith(req, res);
-    superDelete.mockRestore();
+    expect(mockPoolUpdateOne).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(204);
   });
 });

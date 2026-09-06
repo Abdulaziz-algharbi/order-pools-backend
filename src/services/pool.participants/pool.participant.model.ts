@@ -6,7 +6,13 @@ export interface PoolParticipant extends Document {
   payment_ref: Types.ObjectId;
   address_ref: Types.ObjectId;
   quantity: number;
-  status: 'WAITING' | 'REFUNDED' | 'DELIVERED';
+  // PENDING_PAYMENT: quantity reserved, Thawani checkout not yet confirmed
+  // paid. WAITING: payment confirmed, waiting on the pool/delivery
+  // outcome (the field's original meaning, unchanged). PAYMENT_FAILED:
+  // checkout was cancelled/never completed — reservation released, no
+  // money was ever collected. REFUNDED/DELIVERED: unchanged.
+  status:
+    'PENDING_PAYMENT' | 'WAITING' | 'PAYMENT_FAILED' | 'REFUNDED' | 'DELIVERED';
   joinedAt: Date;
 }
 
@@ -43,8 +49,14 @@ const poolParticipantSchema = new Schema<PoolParticipant>(
 
     status: {
       type: String,
-      enum: ['WAITING', 'REFUNDED', 'DELIVERED'],
-      default: 'WAITING',
+      enum: [
+        'PENDING_PAYMENT',
+        'WAITING',
+        'PAYMENT_FAILED',
+        'REFUNDED',
+        'DELIVERED',
+      ],
+      default: 'PENDING_PAYMENT',
     },
   },
   {
@@ -52,7 +64,14 @@ const poolParticipantSchema = new Schema<PoolParticipant>(
   }
 );
 
-export const couldBeUpdated = ['quantity'];
+// `quantity` is deliberately no longer patchable: it's what the retailer's
+// already-created Thawani checkout session was priced against (see
+// PoolParticipantController.create), so changing it after the fact would
+// desync the claimed quantity from the amount actually charged. Changing
+// how much you're contributing now means withdrawing (DELETE, while the
+// pool is still OPEN — releases the reservation/refunds if already paid)
+// and joining again fresh.
+export const couldBeUpdated: string[] = [];
 
 const poolParticipantModel = model<PoolParticipant>(
   'PoolParticipant',

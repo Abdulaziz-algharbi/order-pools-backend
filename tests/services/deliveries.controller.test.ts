@@ -159,6 +159,99 @@ describe('DeliveryController.create', () => {
   });
 });
 
+describe('DeliveryController.update', () => {
+  it('returns 404 when the delivery does not exist', async () => {
+    mockFindById.mockResolvedValue(null);
+    const req = {
+      params: { _id: 'missing' },
+      body: { deliveryStatus: 'DELIVERED' },
+    } as unknown as Request;
+    const res = mockRes();
+
+    await deliveryController.update(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+  });
+
+  it('emits DELIVERY_COMPLETED when deliveryStatus transitions into DELIVERED', async () => {
+    const doc: any = {
+      _id: 'delivery-1',
+      pool_ref: 'pool-1',
+      deliveryStatus: 'DELIVERING',
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    mockFindById.mockResolvedValue(doc);
+    const req = {
+      params: { _id: 'delivery-1' },
+      body: { deliveryStatus: 'DELIVERED' },
+    } as unknown as Request;
+    const res = mockRes();
+
+    const emitted = jest.fn();
+    const unsubscribe = appBroker.on(EVENTS.DELIVERY_COMPLETED, emitted);
+
+    await deliveryController.update(req, res);
+
+    unsubscribe();
+
+    expect(doc.deliveryStatus).toBe('DELIVERED');
+    expect(emitted).toHaveBeenCalledWith({
+      deliveryId: 'delivery-1',
+      poolId: 'pool-1',
+    });
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('does not re-emit DELIVERY_COMPLETED when the delivery is already DELIVERED', async () => {
+    const doc: any = {
+      _id: 'delivery-1',
+      pool_ref: 'pool-1',
+      deliveryStatus: 'DELIVERED',
+      deliveredAt: 'Not Set',
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    mockFindById.mockResolvedValue(doc);
+    const req = {
+      params: { _id: 'delivery-1' },
+      body: { deliveredAt: '2026-01-01T00:00:00Z' },
+    } as unknown as Request;
+    const res = mockRes();
+
+    const emitted = jest.fn();
+    const unsubscribe = appBroker.on(EVENTS.DELIVERY_COMPLETED, emitted);
+
+    await deliveryController.update(req, res);
+
+    unsubscribe();
+
+    expect(emitted).not.toHaveBeenCalled();
+  });
+
+  it('does not emit DELIVERY_COMPLETED for a transition that is not into DELIVERED', async () => {
+    const doc: any = {
+      _id: 'delivery-1',
+      pool_ref: 'pool-1',
+      deliveryStatus: 'PENDING',
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    mockFindById.mockResolvedValue(doc);
+    const req = {
+      params: { _id: 'delivery-1' },
+      body: { deliveryStatus: 'DELIVERING' },
+    } as unknown as Request;
+    const res = mockRes();
+
+    const emitted = jest.fn();
+    const unsubscribe = appBroker.on(EVENTS.DELIVERY_COMPLETED, emitted);
+
+    await deliveryController.update(req, res);
+
+    unsubscribe();
+
+    expect(emitted).not.toHaveBeenCalled();
+  });
+});
+
 describe('DeliveryController.list', () => {
   it('returns 401 when there is no authenticated user', async () => {
     const req = { meta: {} } as Request;

@@ -13,6 +13,7 @@ import supplierRemoveRequests from '../../../services/supplier.remove.requests';
 import deliveries from '../../../services/deliveries';
 import complaints from '../../../services/complaints';
 import notifications from '../../../services/notifications';
+import thawaniWebhookRoutes from '../../../services/webhooks/thawani.webhook.routes';
 
 const router = Router();
 
@@ -29,5 +30,6 @@ router.use('/supplier-remove-requests', supplierRemoveRequests.routes);
 router.use('/deliveries', deliveries.routes);
 router.use('/complaints', complaints.routes);
 router.use('/notifications', notifications.routes);
+router.use('/webhooks', thawaniWebhookRoutes);
 
 export default router;

@@ -1,25 +1,46 @@
 import { model, Schema, Document, Types } from 'mongoose';
 
-interface Payment extends Document {
+export type PaymentStatus =
+  | 'PENDING'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'REFUND_PENDING'
+  | 'REFUNDED'
+  | 'REFUND_FAILED';
+
+export interface Payment extends Document {
+  pool_ref: Types.ObjectId;
+  poolParticipant_ref: Types.ObjectId;
   user_ref: Types.ObjectId;
-  transactionReference: string; // url to the paper (# may be stored in s3)
+  // OMR — the retailer's contribution (quantity * Pool.pricePerUnit at
+  // join time), always computed server-side, never client-supplied.
   amount: number;
-  currency: 'OMR' | 'USD';
-  stripePaymentIntentId: string;
-  status: 'REQUIRES_CAPTURE' | 'COMPLETED' | 'REFUNDED';
+  currency: 'OMR';
+  thawaniSessionId: string;
+  // Set once Thawani's `payments` resource resolves for this session
+  // (needed as the `payment_id` a refund request targets).
+  thawaniPaymentId?: string | null;
+  thawaniRefundId?: string | null;
+  status: PaymentStatus;
   createdAt: Date;
+  updatedAt: Date;
 }
 
 const paymentSchema = new Schema<Payment>(
   {
-    // Ref_ID user ID
+    pool_ref: {
+      type: Types.ObjectId,
+      ref: 'Pool',
+      required: true,
+    },
+    poolParticipant_ref: {
+      type: Types.ObjectId,
+      ref: 'PoolParticipant',
+      required: true,
+    },
     user_ref: {
       type: Types.ObjectId,
       ref: 'User',
-      required: true,
-    },
-    transactionReference: {
-      type: String,
       required: true,
     },
     amount: {
@@ -28,17 +49,26 @@ const paymentSchema = new Schema<Payment>(
     },
     currency: {
       type: String,
-      enum: ['OMR', 'USD'],
+      enum: ['OMR'],
       default: 'OMR',
     },
-    stripePaymentIntentId: {
+    thawaniSessionId: {
       type: String,
       required: true,
     },
+    thawaniPaymentId: { type: String, default: null },
+    thawaniRefundId: { type: String, default: null },
     status: {
       type: String,
-      enum: ['REQUIRES_CAPTURE', 'COMPLETED', 'REFUNDED'],
-      default: 'REQUIRES_CAPTURE',
+      enum: [
+        'PENDING',
+        'COMPLETED',
+        'FAILED',
+        'REFUND_PENDING',
+        'REFUNDED',
+        'REFUND_FAILED',
+      ],
+      default: 'PENDING',
     },
   },
   {
@@ -46,7 +76,10 @@ const paymentSchema = new Schema<Payment>(
   }
 );
 
-export const couldBeUpdated = ['amount'];
+// No client-facing PATCH — every transition (confirm/cancel/refund) goes
+// through a dedicated PaymentController action tied to an actual Thawani
+// confirmation, never a generic field write. See payments.controller.ts.
+export const couldBeUpdated: string[] = [];
 
 const paymentModel = model<Payment>('Payment', paymentSchema);
 

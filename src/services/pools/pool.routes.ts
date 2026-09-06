@@ -35,4 +35,11 @@ router
     poolController.delete.bind(poolController)
   );
 
+router.post(
+  '/:_id/expire',
+  tokenMiddleware,
+  requireRole('ADMIN'),
+  poolController.expirePool.bind(poolController)
+);
+
 export default router;

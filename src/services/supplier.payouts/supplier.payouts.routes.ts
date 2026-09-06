@@ -1,22 +1,42 @@
 import { Router } from 'express';
 import supplierPayoutController from './supplier.payouts.controller';
-import { createSupplierPayoutSchema } from './supplier.payout.schema';
-import { validate } from '../../middlewares';
+import {
+  createSupplierPayoutSchema,
+  updateSupplierPayoutSchema,
+} from './supplier.payout.schema';
+import { validate, tokenMiddleware, requireRole } from '../../middlewares';
 
 const router = Router();
 
+// No DELETE route — a payout is a financial record, never hard-deleted.
 router
   .route('/')
-  .get(supplierPayoutController.list.bind(supplierPayoutController))
+  .get(
+    tokenMiddleware,
+    requireRole('ADMIN', 'SUPPLIER'),
+    supplierPayoutController.list.bind(supplierPayoutController)
+  )
   .post(
+    tokenMiddleware,
+    requireRole('ADMIN'),
     validate(createSupplierPayoutSchema),
     supplierPayoutController.create.bind(supplierPayoutController)
   );
 
 router
   .route('/:_id')
-  .get(supplierPayoutController.getById.bind(supplierPayoutController))
-  .patch(supplierPayoutController.update.bind(supplierPayoutController))
-  .delete(supplierPayoutController.delete.bind(supplierPayoutController));
+  .get(
+    tokenMiddleware,
+    requireRole('ADMIN', 'SUPPLIER'),
+    supplierPayoutController.getById.bind(supplierPayoutController)
+  );
+
+router.patch(
+  '/:_id',
+  tokenMiddleware,
+  requireRole('ADMIN'),
+  validate(updateSupplierPayoutSchema),
+  supplierPayoutController.update.bind(supplierPayoutController)
+);
 
 export default router;

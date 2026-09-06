@@ -14,13 +14,41 @@ jest.mock('../../src/services/product.offers/product.offer.model', () => ({
   default: { distinct: jest.fn() },
 }));
 
+jest.mock('../../src/services/payments/payment.model', () => ({
+  __esModule: true,
+  default: { find: jest.fn(), updateMany: jest.fn() },
+}));
+
+jest.mock(
+  '../../src/services/pool.participants/pool.participant.model',
+  () => ({
+    __esModule: true,
+    default: { updateMany: jest.fn() },
+  })
+);
+
+const mockCreateRefund = jest.fn();
+
+jest.mock('../../src/services/thawani/thawani.gateway', () => ({
+  __esModule: true,
+  default: {
+    createRefund: (...args: unknown[]) => mockCreateRefund(...args),
+  },
+}));
+
 import poolController from '../../src/services/pools/pool.controller';
 import poolModel from '../../src/services/pools/pool.model';
 import productOfferModel from '../../src/services/product.offers/product.offer.model';
+import paymentModel from '../../src/services/payments/payment.model';
+import poolParticipantModel from '../../src/services/pool.participants/pool.participant.model';
 
 const mockFind = poolModel.find as unknown as jest.Mock;
 const mockFindById = poolModel.findById as unknown as jest.Mock;
 const mockOfferDistinct = productOfferModel.distinct as unknown as jest.Mock;
+const mockPaymentFind = paymentModel.find as unknown as jest.Mock;
+const mockPaymentUpdateMany = paymentModel.updateMany as unknown as jest.Mock;
+const mockParticipantUpdateMany =
+  poolParticipantModel.updateMany as unknown as jest.Mock;
 
 function mockRes() {
   const res: Partial<Response> = {};
@@ -196,5 +224,131 @@ describe('PoolController.getById', () => {
     await poolController.getById(req, res);
 
     expect(res.status).toHaveBeenCalledWith(200);
+  });
+});
+
+describe('PoolController.expirePool', () => {
+  const YESTERDAY = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const TOMORROW = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+  function poolDoc(overrides: Record<string, unknown> = {}) {
+    return {
+      _id: 'pool-1',
+      status: 'OPEN',
+      endDate: YESTERDAY,
+      save: jest.fn().mockResolvedValue(undefined),
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    mockPaymentUpdateMany.mockResolvedValue({});
+    mockParticipantUpdateMany.mockResolvedValue({});
+    mockPaymentFind.mockResolvedValue([]);
+  });
+
+  it('returns 404 when the pool does not exist', async () => {
+    mockFindById.mockResolvedValue(null);
+    const req = { params: { _id: 'missing' } } as unknown as Request;
+    const res = mockRes();
+
+    await poolController.expirePool(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+  });
+
+  it('returns 409 when the pool is not OPEN', async () => {
+    mockFindById.mockResolvedValue(poolDoc({ status: 'TARGET_REACHED' }));
+    const req = { params: { _id: '1' } } as unknown as Request;
+    const res = mockRes();
+
+    await poolController.expirePool(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+  });
+
+  it('returns 409 when the pool has not reached its endDate yet', async () => {
+    mockFindById.mockResolvedValue(poolDoc({ endDate: TOMORROW }));
+    const req = { params: { _id: '1' } } as unknown as Request;
+    const res = mockRes();
+
+    await poolController.expirePool(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+  });
+
+  it('sets the pool CANCELLED and sweeps still-PENDING payments to FAILED', async () => {
+    const pool = poolDoc();
+    mockFindById.mockResolvedValue(pool);
+    const req = { params: { _id: '1' } } as unknown as Request;
+    const res = mockRes();
+
+    await poolController.expirePool(req, res);
+
+    expect(pool.status).toBe('CANCELLED');
+    expect(pool.save).toHaveBeenCalled();
+    expect(mockPaymentUpdateMany).toHaveBeenCalledWith(
+      { pool_ref: 'pool-1', status: 'PENDING' },
+      { $set: { status: 'FAILED' } }
+    );
+    expect(mockParticipantUpdateMany).toHaveBeenCalledWith(
+      { pool_ref: 'pool-1', status: 'PENDING_PAYMENT' },
+      { $set: { status: 'PAYMENT_FAILED' } }
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('requests a refund for every COMPLETED payment and reports the count', async () => {
+    const pool = poolDoc();
+    mockFindById.mockResolvedValue(pool);
+    const payment1: any = {
+      _id: 'payment-1',
+      status: 'COMPLETED',
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    mockPaymentFind.mockResolvedValue([payment1]);
+    mockCreateRefund.mockResolvedValue({ refund_id: 'refund-1' });
+    const req = { params: { _id: '1' } } as unknown as Request;
+    const res = mockRes();
+
+    await poolController.expirePool(req, res);
+
+    expect(mockCreateRefund).toHaveBeenCalledWith(
+      expect.objectContaining({ paymentId: 'payment-1' })
+    );
+    expect(payment1.status).toBe('REFUND_PENDING');
+    expect(payment1.thawaniRefundId).toBe('refund-1');
+    const [body] = (res.send as jest.Mock).mock.calls[0];
+    expect(body.refundsRequested).toBe(1);
+    expect(body.refundsFailed).toBe(0);
+  });
+
+  it('marks a payment REFUND_FAILED (without blocking the others) when its refund request errors', async () => {
+    const pool = poolDoc();
+    mockFindById.mockResolvedValue(pool);
+    const payment1: any = {
+      _id: 'payment-1',
+      status: 'COMPLETED',
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    const payment2: any = {
+      _id: 'payment-2',
+      status: 'COMPLETED',
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    mockPaymentFind.mockResolvedValue([payment1, payment2]);
+    mockCreateRefund
+      .mockRejectedValueOnce(new Error('gateway down'))
+      .mockResolvedValueOnce({ refund_id: 'refund-2' });
+    const req = { params: { _id: '1' } } as unknown as Request;
+    const res = mockRes();
+
+    await poolController.expirePool(req, res);
+
+    expect(payment1.status).toBe('REFUND_FAILED');
+    expect(payment2.status).toBe('REFUND_PENDING');
+    const [body] = (res.send as jest.Mock).mock.calls[0];
+    expect(body.refundsRequested).toBe(1);
+    expect(body.refundsFailed).toBe(1);
   });
 });

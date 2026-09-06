@@ -17,6 +17,8 @@
 ###        SEED_ADMIN_1_EMAIL=smoothflow-admin@test.local \
 ###        SEED_ADMIN_1_PASSWORD=SmoothFlowAdmin123 npm run seed:admins
 ###      or swap in your own admin's email/password below.
+###   3. THAWANI_SECRET_KEY/THAWANI_PUBLISHABLE_KEY set to real Thawani UAT
+###      sandbox keys (see .env.example) — step 12 calls Thawani for real.
 ###
 ### Re-running from the top will fail at step 3/4 with 409 Conflict
 ### (email already registered) — either bump the two emails below or
@@ -213,38 +215,14 @@ Authorization: Bearer {{adminToken}}
 
 @poolId = {{createPool.response.body._id}}
 
-### 12. Retailer fetches their own profile to get their user id (needed as Payment.user_ref)
-
-# @name retailerMe
-GET {{root}}/auth/me
-Authorization: Bearer {{retailerToken}}
-
-###
-
-@retailerUserId = {{retailerMe.response.body.user._id}}
-
-### 13. Retailer pays (the payments route has no auth/business-logic wired up yet)
-
-# @name createPayment
-POST {{root}}/payments
-Content-Type: application/json
-
-{
-  "user_ref": "{{retailerUserId}}",
-  "transactionReference": "txn_smooth_flow_001",
-  "amount": 100,
-  "stripePaymentIntentId": "pi_smooth_flow_001"
-}
-
-###
-
-@paymentId = {{createPayment.response.body._id}}
-
-### 14. Retailer joins the pool, claiming the whole remaining quantity (10).
+### 12. Retailer joins the pool, claiming the whole remaining quantity (10).
 ###     PoolParticipantController.create atomically decrements
 ###     Pool.currentQuantity by the joined quantity and, since that leaves
-###     exactly 0, flips Pool.status straight to TARGET_REACHED — no manual
-###     admin step needed for either.
+###     exactly 0, flips Pool.status straight to TARGET_REACHED right away
+###     — no manual admin step needed for that part. It also computes the
+###     contribution amount, creates a Payment (PENDING), and opens a
+###     Thawani checkout session, returning both the payment and a
+###     checkoutUrl. The participant itself starts PENDING_PAYMENT.
 
 # @name joinPool
 POST {{root}}/participants
@@ -253,10 +231,30 @@ Authorization: Bearer {{retailerToken}}
 
 {
   "pool_ref": "{{poolId}}",
-  "payment_ref": "{{paymentId}}",
   "address_ref": "{{retailerAddressId}}",
   "quantity": 10
 }
+
+###
+
+@paymentId = {{joinPool.response.body.payment._id}}
+@checkoutUrl = {{joinPool.response.body.checkoutUrl}}
+
+### 13. Open {{checkoutUrl}} in a browser and pay with a Thawani UAT test
+###     card — this step can't be scripted here, it's an actual hosted
+###     checkout page. The rest of this flow (delivery assignment,
+###     notifications) doesn't depend on this actually being completed,
+###     since the pool's quantity was already reserved at step 12 — but
+###     the Payment/participant will stay PENDING/PENDING_PAYMENT forever
+###     until either this is done and confirmed (step 14) or someone
+###     cancels it (POST /payments/:id/cancel — see payments.http).
+
+### 14. Confirm the payment against Thawani (only moves to COMPLETED if
+###     step 13 was actually completed — otherwise this just reports
+###     PENDING, harmlessly, and can be re-run later)
+
+POST {{root}}/payments/{{paymentId}}/confirm
+Authorization: Bearer {{retailerToken}}
 
 ### 15. Admin assigns the delivery — raises DELIVERY_ASSIGNED, which notifies
 ###     the offer's supplier and every participant of this pool

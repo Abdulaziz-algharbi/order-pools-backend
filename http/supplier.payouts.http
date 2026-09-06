@@ -1,29 +1,54 @@
 @baseUrl=http://localhost:8000/api/v1/payouts
 @payoutID=REPLACE_WITH_PAYOUT_ID
 @poolId=REPLACE_WITH_POOL_ID
+@supplierToken=REPLACE_WITH_SUPPLIER_ACCESS_TOKEN
+@adminToken=REPLACE_WITH_ADMIN_ACCESS_TOKEN
 
-# This route has no auth/role checks wired up yet.
+# amount is looked up server-side from the pool's ProductOffer.price — not
+# accepted from the client. The platform's margin is fixed by the admin up
+# front (baked into Pool.pricePerUnit vs. that price when the pool is
+# created), so it's never recomputed from actual retailer payments. A
+# payout is auto-created the moment an admin PATCHes the pool's Delivery to
+# DELIVERED (see DeliveryController.update()/SupplierPayoutController.listeners()) —
+# Thawani has no vendor/marketplace payout capability, so this is purely an
+# internal record an admin pays out manually, outside Thawani entirely.
 
-### create payout
+### manual fallback: create a payout for a pool whose delivery is DELIVERED
+### (ADMIN only) — normally unnecessary since marking the delivery DELIVERED
+### auto-creates this; use it only if that auto-create was skipped (e.g. the
+### pool's product offer couldn't be found at that moment)
 
 POST {{baseUrl}}
 Content-Type: application/json
+Authorization: Bearer {{adminToken}}
 
 {
-    "pool_ref": "{{poolId}}",
-    "grossAmount": 350,
-    "platformCommission": 30,
-    "netAmount": 350
+    "pool_ref": "{{poolId}}"
 }
 
-### list payoutes
+### list my own payouts (SUPPLIER — pools built from their own offers)
 
 GET {{baseUrl}}
+Authorization: Bearer {{supplierToken}}
 
-### get payout by id
+### list every payout (ADMIN)
+
+GET {{baseUrl}}
+Authorization: Bearer {{adminToken}}
+
+### get a payout by id (owning SUPPLIER, or ADMIN for any)
 
 GET {{baseUrl}}/{{payoutID}}
+Authorization: Bearer {{supplierToken}}
 
-### delete payout
+### record the manual transfer and mark it COMPLETED (ADMIN only) —
+### paidAt is auto-stamped if not supplied
 
-DELETE {{baseUrl}}/{{payoutID}}
+PATCH {{baseUrl}}/{{payoutID}}
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+    "status": "COMPLETED",
+    "transactionReference": "bank-transfer-ref-123"
+}

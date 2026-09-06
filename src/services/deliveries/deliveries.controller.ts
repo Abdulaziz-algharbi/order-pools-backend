@@ -65,6 +65,48 @@ class DeliveryController extends BaseController {
     }
   }
 
+  // ADMIN only (enforced by requireRole on the route). Written directly
+  // (rather than delegating to BaseController.update) so a transition into
+  // DELIVERED can raise the DeliveryCompleted business event — see
+  // SupplierPayoutController.listeners(), which is the only place that
+  // event turns into an auto-created payout. Gated on the *transition*
+  // (not just the resulting status) so re-saving an already-DELIVERED
+  // delivery never re-fires it.
+  async update(req: Request, res: Response): Promise<void> {
+    try {
+      const doc = await this.model.findById(req.params._id);
+      if (!doc) {
+        res.status(404).send({ message: 'Document not Found', data: null });
+        return;
+      }
+
+      const wasDelivered = doc.deliveryStatus === 'DELIVERED';
+
+      const data = req.body;
+      for (const field of Object.keys(data)) {
+        if (this.allowedFields.includes(field)) {
+          doc[field] = data[field];
+        }
+      }
+      await doc.save();
+      this.logger.info(`${this.model.modelName} Updated`);
+
+      if (!wasDelivered && doc.deliveryStatus === 'DELIVERED') {
+        this.broker.emit(EVENTS.DELIVERY_COMPLETED, {
+          deliveryId: doc._id.toString(),
+          poolId: doc.pool_ref.toString(),
+        });
+      }
+
+      res.status(200).send({
+        message: 'Document updated successfully',
+        data: doc,
+      });
+    } catch (error) {
+      this.errorHandler(error, req, res);
+    }
+  }
+
   // Admin sees every delivery. A retailer sees deliveries for pools they
   // joined; a supplier sees deliveries for pools built from their own
   // offers (Pool -> ProductOffer.user_ref).

@@ -6,8 +6,10 @@ export const createPoolParticipantSchema = z
     // No user_ref here: a participant is always the authenticated caller
     // (RETAILER, enforced by requireRole on the route).
     // PoolParticipantController.create sets it from the session, never the client.
+    // No payment_ref either — PoolParticipantController.create creates the
+    // Payment itself (server-computed amount, Thawani checkout session)
+    // and links it, rather than trusting a client-supplied payment.
     pool_ref: objectId('Invalid pool ID'),
-    payment_ref: objectId('Invalid payment ID'),
     address_ref: objectId('Invalid address ID'),
     quantity: z.number().positive(),
   })
@@ -15,15 +17,4 @@ export const createPoolParticipantSchema = z
 
 export type CreatePoolParticipantInput = z.infer<
   typeof createPoolParticipantSchema
->;
-
-// mirrors pool.participant.model.ts `couldBeUpdated` — keep both in sync
-export const updatePoolParticipantSchema = z
-  .object({
-    quantity: z.number().positive(),
-  })
-  .strict();
-
-export type UpdatePoolParticipantInput = z.infer<
-  typeof updatePoolParticipantSchema
 >;

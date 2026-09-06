@@ -1,39 +1,54 @@
 @baseUrl=http://localhost:8000/api/v1/payments
 @paymentId=REPLACE_WITH_PAYMENT_ID
-@userID=REPLACE_WITH_USER_ID
+@retailerToken=REPLACE_WITH_RETAILER_ACCESS_TOKEN
+@adminToken=REPLACE_WITH_ADMIN_ACCESS_TOKEN
 
-# This route has no auth/role checks wired up yet — anyone can create a
-# payment for any user_ref. See 00-smooth-flow.http for a chained run
-# that creates a real user/payment end to end.
-### create payment
+# No POST / — a Payment is only ever created as a side effect of
+# POST /participants (see pool.participants.http / 00-smooth-flow.http),
+# which also returns the Thawani checkoutUrl to redirect the retailer to.
+# No PATCH /:id either — every transition below is a dedicated action tied
+# to an actual Thawani confirmation, not a generic field write.
 
-POST {{baseUrl}}
-Content-Type: application/json
-
-{
-    "user_ref": "{{userID}}",
-    "transactionReference": "s3 urls",
-    "amount": 50,
-    "stripePaymentIntentId": "stripe id"
-}
-
-### list payments
+### list my own payments (RETAILER)
 
 GET {{baseUrl}}
+Authorization: Bearer {{retailerToken}}
 
-### get payment by id
+### list every payment (ADMIN)
+
+GET {{baseUrl}}
+Authorization: Bearer {{adminToken}}
+
+### get a specific payment (owner, or ADMIN for any)
 
 GET {{baseUrl}}/{{paymentId}}
+Authorization: Bearer {{retailerToken}}
 
-### update payment
+### confirm payment status against Thawani (owner or ADMIN) — this is what
+### the frontend calls when the retailer lands back on success_url; only a
+### 'paid' Thawani session moves the payment to COMPLETED and the
+### participation to WAITING
 
-PATCH {{baseUrl}}/{{paymentId}}
-Content-Type: application/json
+POST {{baseUrl}}/{{paymentId}}/confirm
+Authorization: Bearer {{retailerToken}}
 
-{
-    "amount": 60
-}
+### cancel a still-PENDING payment (owner or ADMIN) — this is what the
+### frontend calls when the retailer lands on cancel_url, or what an admin
+### does to clear a session nobody ever returned to; releases the pool's
+### quantity reservation if the pool is still OPEN
 
-### delete payment
+POST {{baseUrl}}/{{paymentId}}/cancel
+Authorization: Bearer {{retailerToken}}
 
-DELETE {{baseUrl}}/{{paymentId}}
+### retry a refund request that previously failed (ADMIN only, from
+### REFUND_FAILED)
+
+POST {{baseUrl}}/{{paymentId}}/retry-refund
+Authorization: Bearer {{adminToken}}
+
+### manually confirm a refund actually completed (ADMIN only, from
+### REFUND_PENDING) — a deliberate human step, not an automatic poll; see
+### thawani.gateway.ts for why
+
+POST {{baseUrl}}/{{paymentId}}/confirm-refund
+Authorization: Bearer {{adminToken}}

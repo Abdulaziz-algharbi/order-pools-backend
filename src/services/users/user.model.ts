@@ -9,8 +9,6 @@ export interface IUser extends Document {
   firstName: string;
   lastName: string;
   email: string;
-  stripeCustomerId: string;
-  stripePaymentMehtodId: string;
   phoneNumber: string;
   password: string; // hashed sha256
   companyName: string;

@@ -32,8 +32,8 @@
 - No pool-join operation exists beyond generic `PoolParticipant` create — joining a pool should atomically create the `PoolParticipant`, increment `Pool.currentQuantity`, and place a `Payment` hold; none of that orchestration, nor the concurrency control it needs (e.g. a transaction/session, or an atomic `$inc` with a bound check to avoid overshooting `Pool` capacity), currently exists.
 - No logic drives `Pool.status` transitions (`OPEN -> TARGET_REACHED -> DISTRIBUTING -> COMPLETED -> CANCELLED`) — the field exists but nothing computes or enforces it.
 - No logic drives `Delivery.deliveryStatus` progression (`PENDING -> DELIVERING -> DELIVERED`) beyond raw `PATCH` — creation itself is now gated on `Pool.status` (see `docs/unimplemented-features.md` §4).
-- No payout calculation logic for `SupplierPayout` (`grossAmount`/`platformCommission`/`netAmount`) — the model has a comment noting "need to be reviewed to do the calculation in the backend."
-- No Stripe (or other payment provider) integration — `stripeCustomerId`, `stripePaymentMehtodId` (typo, not fixed here since it's existing field naming), and `stripePaymentIntentId` exist as schema fields only; no `stripe` package is installed and no charge/capture/refund flow exists.
+- `SupplierPayout.amount` is a direct lookup of the pool's `ProductOffer.price`, not a computed platform-commission split — the admin fixes the platform's margin up front in `Pool.pricePerUnit` at pool-creation time, and the frontend is responsible for warning the admin if a chosen `pricePerUnit`/`minimumContribution` would produce a loss (no backend enforcement of profitability by design, for pricing flexibility).
+- Payment provider integration is Thawani (see `src/services/thawani/thawani.gateway.ts`) — Stripe is not used anywhere in the MVP.
 - No transactions/sessions used anywhere in the codebase, despite several flows above needing atomicity across multiple documents.
 
 **Infrastructure**
@@ -47,7 +47,7 @@
 2. Add Zod schemas for the remaining services, following the `auth`/`users`/`addresses` pattern.
 3. Implement the pool-join business flow (create `PoolParticipant` + `Payment` + increment `Pool.currentQuantity`) as a dedicated controller method using a Mongoose session/transaction, with a guard against exceeding the offer's `wholeQuantity`.
 4. Implement `Pool` status transition logic (likely triggered from the join flow and/or a scheduled/admin action).
-5. Decide on and integrate a payment provider (Stripe or otherwise) before building out `Payment` capture/refund logic.
+5. Build out `Payment` capture/refund logic against Thawani (see `src/services/thawani/thawani.gateway.ts`).
 6. Add a minimal test setup (framework choice, `tests/` layout, `npm test` script) before relying on automated verification of the above.
 
 This list reflects gaps observed in the code, not commitments — confirm priorities with the project owner before acting on it.
