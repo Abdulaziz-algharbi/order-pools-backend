@@ -1,47 +1,61 @@
 # Unimplemented Features — Admin / Business Owner Workflow
 
-> Gap analysis produced by inspecting `src/` directly on 2026-09-02 (previous snapshot: 2026-08-28 — a great deal has shipped since, see Methodology). This is a snapshot, not a commitment — re-verify against the code before treating a line here as still accurate, and before starting each item confirm nothing else touched it in the meantime.
+> Gap analysis produced by inspecting `src/` directly on 2026-09-07 (previous snapshot: 2026-09-02, itself superseded mid-writing by the same day's later commits — see Methodology). This is a snapshot, not a commitment — re-verify against the code before treating a line here as still accurate, and before starting each item confirm nothing else touched it in the meantime.
+
+## Overall status: core flows are implemented and passing — ready for end-to-end testing
+
+Every route module is wired into `src/routes/api/v1/index.ts`, `npm run build` (`tsc`) compiles clean, `npx eslint .` reports 0 errors (12 pre-existing `no-console` warnings in scripts/bootstrap files only), and the full Jest suite is green: **35 suites / 507 tests passing**, 0 failing. The full retailer/supplier/admin lifecycle — register → file/approve a supplier request → create a product offer → admin creates a pool → retailer joins (Thawani checkout) → payment confirms (webhook or polling) → pool auto-advances `OPEN → TARGET_REACHED → DISTRIBUTING` → admin assigns/completes delivery → pool auto-advances to `COMPLETED` → supplier payout auto-creates → admin records the payout as paid — now runs start to finish without a manual `PATCH` gluing two calls together, backed by real Mongo transactions at every multi-document write. That makes the API substantially ready for QA/integration testing of the happy path and the auth/role matrix.
+
+What's *not* done are specific, enumerated gaps (below) — mostly dedicated admin actions that today are still "just PATCH the status field yourself" (offer approve/negotiate/reject), a couple of missing visibility/filtering conveniences, and notification coverage for newer event types. None of these block exercising the core pool lifecycle end to end; they matter for polish, admin UX, and a few authorization/data-integrity edge cases called out explicitly below.
 
 ## Methodology
 
-Every model in `src/services/*/*.model.ts` and its `couldBeUpdated` whitelist, every controller's custom (non-CRUD) logic, every `*.routes.ts` for which middleware is actually applied, `src/middlewares/*`, `src/constants/{REGISTRY,ERRORS,EVENTS}.ts`, `BaseController`, and the `tests/` directory were inspected directly for this pass — not assumed from the prior version of this doc or from `docs/project-scope.md`/`docs/tech-stack.md` (both are their own snapshots and can also have drifted).
+Every model in `src/services/*/*.model.ts` and its `couldBeUpdated` whitelist, every controller's custom (non-CRUD) logic, every `*.routes.ts` for which middleware is actually applied, `src/middlewares/*`, `src/constants/{REGISTRY,ERRORS,EVENTS}.ts`, `BaseController`, and the `tests/` directory were inspected directly for this pass — not assumed from the prior version of this doc or from `docs/project-scope.md`/`docs/tech-stack.md` (both are their own snapshots and can also have drifted). `npm run build`, `npx eslint .`, and the full `npx jest` run were all executed directly for this pass, not assumed.
 
-**Since the 2026-08-28 snapshot, the following shipped** (per `git log`) and invalidate large parts of the old version of this document:
-- `User.role: UserRole` → `User.roles: UserRole[]` — a user can now hold more than one role at once (e.g. an approved supplier request adds `SUPPLIER` onto an existing `RETAILER` rather than replacing it). `requireRole(...roles)` now matches if *any* of the caller's roles is in the allowed set.
-- Role-scoped access control (auth + ownership/ADMIN-or-owner filtering) added to `pools`, `pool.participants`, `product.offers`, `addresses`, `complaints` (partially), `deliveries`, `notifications`, `supplier.requests`.
-- A real `SupplierRequest` model/controller/routes now exists end to end (§7 below is fully rewritten — the old "no such entity" gap is closed).
-- The separate `Product` entity was dropped; `ProductOffer` now directly carries `name/description/brand/unit/images/wholeQuantity/price` itself (no `product_ref`).
-- `Notification` was restructured: `recipient_ref: ObjectId[]` + top-level `isRead`/`readAt` → `recipients: [{ user_ref, isRead, readAt }]` (per-recipient read state). `type` enum was also narrowed to just `'DELIVERY_ASSIGNED'` (the old `PRODUCT_APPROVED`/`NEW OFFER`/`NEW COMPLAINT` values are gone, not extended).
-- A `DELIVERY_ASSIGNED` business event now exists (`src/constants/EVENTS.ts`, an `AppBroker` pub/sub pattern) and actually notifies both the supplier and every participating retailer when an admin assigns a delivery.
-- `Pool.startDate` — previously declared in the TS interface/`couldBeUpdated` but missing from the actual Mongoose schema (a dead field) — is now a real schema field.
-- `Pool.currentQuantity` now means *quantity still available to be claimed* (counts down from an initial value toward 0), not a running total collected. Joining a pool (`POST /participants`) atomically decrements it and enforces `minimumContribution <= quantity <= currentQuantity`, forbidding a join that would leave a nonzero remainder below `minimumContribution`. Hitting exactly 0 auto-flips `Pool.status` to `TARGET_REACHED` in the same atomic operation — the `OPEN → TARGET_REACHED` transition described as entirely missing in the old snapshot is now handled, at least for this one trigger.
-- `POST /auth/logout` and `DELETE /auth/remove` now exist, plus a new `supplier.remove.requests` service (see new §1a/§12 below).
-- A Jest test suite now exists and is wired up (`npm test`, `jest.config.js`) — 23 suites / 335+ tests as of this pass. The prior doc's implicit assumption of no test coverage is stale; `CLAUDE.md` itself still says "no test framework is currently wired up," which is now inaccurate too.
+**This pass corrects two internal inconsistencies left by the 2026-09-02 draft**, which was apparently written before that day's later commits (`f428e68` Thawani integration, `54455d4` pool/payout status automation, `c7753bf` list() refactor + tests, `69ff48f` transactions) and never fully reconciled against them:
+- Old §1 still described `payments`/`supplier.payouts` as "zero auth, untouched generic CRUD" and listed authenticating them as the top "still needed" item, while old §11 already said the opposite ("auth coverage is effectively universal... re-verified directly against payments.routes.ts/supplier.payouts.routes.ts"). Re-verified again this pass: **§11 was right, §1 was stale.** Both routes files require `tokenMiddleware` + `requireRole` on every route, and neither controller is generic CRUD any more — see the new §1a below.
+- Old §3/§4 still listed "nothing computes/enforces `TARGET_REACHED → DISTRIBUTING → COMPLETED`" and "no Pool.status update on delivery status change" as missing, while the old Summary's "Resolved since the above was written" list already said this was done. Re-verified: it **is** done (`DeliveryController.create()`/`.update()`, see §4).
+
+**Since the 2026-09-02 snapshot, the following also shipped** (per `git log`, commits `f428e68`, `54455d4`, `c7753bf`, `69ff48f`) and is new to this document:
+- A full `Payment`/Thawani checkout integration: `src/services/thawani/thawani.gateway.ts` (session creation, status lookup, refund request against Thawani's API), `src/services/payments/` restructured from generic CRUD into dedicated action endpoints (`confirm`/`cancel`/`retry-refund`/`confirm-refund`, no generic `POST`/`PATCH`), and `src/services/webhooks/thawani.webhook.controller.ts` (an intentionally unauthenticated callback endpoint that only ever triggers a re-verification against Thawani itself, never trusts the payload — see §1a).
+- `SupplierPayout` auto-creation off a `DELIVERY_COMPLETED` event, plus a `Pool.supplierPaymentStatus` sync when a payout is marked `COMPLETED` (§6a).
+- `Pool.status` now advances automatically past `TARGET_REACHED`: assigning a delivery flips it to `DISTRIBUTING`, and the delivery reaching `DELIVERED` flips it to `COMPLETED` and every still-`WAITING` `PoolParticipant` to `DELIVERED` (§3/§4).
+- `PoolController.expirePool()` and `PaymentController.confirmPaymentById()`/`confirmRefund()` now wrap their multi-document writes in real Mongoose transactions, backed by Mongo now running as a single-node replica set in `docker-compose.yml` (§11).
+- `BaseController.list()` was refactored into the single generic implementation described in §11 (this was previously listed as a "resolved" item already, now re-verified against the actual current code, including its interaction with the new `payments`/`supplier.payouts` controllers).
+- Test suite grew from 23 suites / 335+ tests to **35 suites / 507 tests**, all passing, covering the new payments/webhook/payout code paths (`payments.controller.test.ts`, `payments.routes.test.ts`, `thawani.gateway.test.ts`, `thawani.webhook.controller.test.ts`, `supplier.payouts.controller.test.ts`, `supplier.payouts.routes.test.ts`, plus `pool.model.test.ts` and `delivery-notification.integration.test.ts`).
 
 ---
 
 ## 1. Admin Account / Authorization
 
-**Substantially rolled out since the last pass — two fully unauthenticated modules remain.**
+**Closed.** JWT carries `{ _id, roles }` (`src/services/auth/auth.controller.ts`, `jwt.util.ts`). `tokenMiddleware` attaches `{ userId, roles }` to `req.meta.user`. `requireRole(...roles)` matches on *any* overlap with the caller's roles (401 no user, 403 no overlap). `scripts/seed-admins.ts` (`npm run seed:admins`) is unchanged.
 
-- Done: JWT carries `{ _id, roles }` (`src/services/auth/auth.controller.ts`, `jwt.util.ts`). `tokenMiddleware` attaches `{ userId, roles }` to `req.meta.user`. `requireRole(...roles)` matches on *any* overlap with the caller's roles (401 no user, 403 no overlap).
-- Done: `scripts/seed-admins.ts` (`npm run seed:admins`) — unchanged from the last pass.
-- Done: every route module below now applies `tokenMiddleware` (+ `requireRole` and/or controller-level ownership checks) **except two**:
-  - **`payments`** (`src/services/payments/payments.routes.ts`) — every verb (`GET/POST/PATCH/DELETE`) has zero `tokenMiddleware`. `PaymentController` is untouched generic CRUD (no overrides at all). Anyone can list every payment, create a payment under an arbitrary `user_ref`, or delete any payment record.
-  - **`supplier.payouts`** (`src/services/supplier.payouts/supplier.payouts.routes.ts`) — same: zero auth, generic CRUD, no overrides.
-- All other modules (`addresses`, `auth`, `complaints`, `deliveries`, `notifications`, `pool.participants`, `pools`, `product.offers`, `supplier.remove.requests`, `supplier.requests`, `users`) require `tokenMiddleware` on every non-public route, and most also apply either `requireRole` or a controller-level ownership/role split (see each section). `pools` `GET`/`GET :id` and `addresses` `POST` intentionally allow anonymous/optional auth (public pool browsing; pre-registration address creation) — that's a deliberate design choice, not a gap.
-- `complaints` `GET`/`GET :id`/`PATCH :id` apply `tokenMiddleware` but no `requireRole` — access is instead narrowed inside the controller (owner-or-ADMIN). This is consistent with the pattern used elsewhere (e.g. `addresses`) and not itself a gap.
+Every route module applies `tokenMiddleware` (+ `requireRole` and/or controller-level ownership checks), **with one deliberate exception**: the Thawani webhook (`POST /webhooks/thawani`) is intentionally unauthenticated — it's called by Thawani, not a logged-in user, and never trusted directly (see §1a). Everything else, including `payments` and `supplier.payouts` (previously the two most exposed modules — this is what the old §1 still flagged as "still needed"), is fully authenticated and role-scoped. Re-verified directly against every `*.routes.ts` file this pass: auth coverage is complete except for that one deliberate webhook exception.
 
-**Still needed:** authenticate and authorize `payments` and `supplier.payouts` — currently the two most exposed modules in the API (financial records, no auth at all).
+`pools` `GET`/`GET :id` and `addresses` `POST` intentionally allow anonymous/optional auth (public pool browsing; pre-registration address creation) — a deliberate design choice, not a gap. `complaints` `GET`/`GET :id`/`PATCH :id` apply `tokenMiddleware` but no `requireRole` — access is narrowed inside the controller (owner-or-ADMIN), consistent with the pattern used elsewhere (e.g. `addresses`).
+
+**Nothing outstanding here.**
 
 ---
 
-## 1a. Auth Session Management (new since last pass)
+## 1a. Auth Session Management
 
-- Done: `POST /auth/logout` (any authenticated role) clears the caller's persisted `Auth.refreshToken`, and `POST /auth/refresh` now checks the presented refresh token against that persisted value (previously it only checked the JWT's own signature/expiry and never consulted the DB at all — a logged-out or rotated refresh token would silently have kept working). The caller's current *access* token still works until its own expiry (`JWT_TOKEN_TTL`, default `1h`) — there is no access-token revocation/blacklist.
+- Done: `POST /auth/logout` (any authenticated role) clears the caller's persisted `Auth.refreshToken`, and `POST /auth/refresh` checks the presented refresh token against that persisted value. The caller's current *access* token still works until its own expiry (`JWT_TOKEN_TTL`, default `1h`) — there is no access-token revocation/blacklist.
 - Done: `DELETE /auth/remove` (any authenticated role, body `{ reason }`) — a caller without `SUPPLIER` is deleted immediately (`User` + `Auth` records); a caller with `SUPPLIER` (with or without `RETAILER`) instead opens a `SupplierRemoveRequest` for admin review (see §12) rather than self-deleting outright.
 - Missing: no equivalent flow exists for a RETAILER-only self-deletion to check for *their own* loose ends (e.g. an open `PoolParticipant`/pending payment) before hard-deleting — it just deletes. Whether that matters depends on a product decision about what should happen to a pool's `currentQuantity`/`PoolParticipant` rows when a participant's account vanishes; nothing today reconciles that (no cascading update, no orphan check).
 - Missing: no access-token blacklist/short-TTL-and-rotate scheme, so "log out everywhere immediately" is only partially true (see above).
+
+---
+
+## 1b. Payments & Thawani Integration (new section — undocumented until this pass)
+
+- `src/services/thawani/thawani.gateway.ts` wraps Thawani's checkout-session and refund APIs. A `Payment` (`user_ref`, `pool_ref`, `poolParticipant_ref`, `thawaniSessionId`, `thawaniPaymentId`, `thawaniRefundId`, `status: PENDING|COMPLETED|FAILED|REFUND_PENDING|REFUNDED|REFUND_FAILED`, `amount`) is created only as a side effect of `PoolParticipantController.create()` (joining a pool) — there is no generic `POST /payments` and `couldBeUpdated` is empty (no generic `PATCH` either); every state transition goes through one of the dedicated actions below.
+- `POST /payments/:id/confirm` (owner or ADMIN) — re-verifies the session against Thawani directly (never trusts a redirect) and, on a real `PENDING → COMPLETED` transition, atomically flips the linked `PoolParticipant` to `WAITING` inside a Mongo transaction. Idempotent — safe under a race with the webhook.
+- `POST /payments/:id/cancel` (owner or ADMIN) — only valid from `PENDING`, flips to `FAILED`, flips the participant to `PAYMENT_FAILED`, and releases the pool's reserved quantity back (only if the pool is still `OPEN`).
+- `POST /payments/:id/retry-refund` and `POST /payments/:id/confirm-refund` (ADMIN only) — re-request a failed refund against Thawani, and manually confirm a refund completed (deliberately manual: Thawani's refund-status response schema isn't confirmed from documentation, so an admin checks the merchant dashboard rather than the code guessing at an unconfirmed status string). `confirm-refund` flips both `Payment` and `PoolParticipant` to `REFUNDED` inside a transaction.
+- `POST /webhooks/thawani` — unauthenticated by design (see §1). The payload is never trusted for anything beyond extracting a `client_reference_id` to know *which* payment to re-check; the actual state change always comes from a fresh authenticated call back to Thawani via `confirmPaymentById()`. A forged webhook call can at most trigger a redundant, harmless status check.
+- **Missing:** no webhook signature verification scheme is implemented (the code comments note Thawani doesn't document one to verify against) — this is a known, accepted gap rather than an oversight, but worth re-confirming against Thawani's current docs before going live with real money.
+- **Missing:** no automated retry/sweep for a `Payment` stuck `PENDING` indefinitely (e.g. retailer abandons checkout without hitting `cancel_url`) beyond whatever `PoolController.expirePool()` sweeps when a *pool* expires — there's no payment-level timeout independent of pool expiry.
 
 ---
 
@@ -49,61 +63,71 @@ Every model in `src/services/*/*.model.ts` and its `couldBeUpdated` whitelist, e
 
 **The `Product`/`ProductOffer` split from the old spec no longer exists — `ProductOffer` is now the single, self-contained entity.**
 
-- Already implemented: `ProductOffer` directly carries `name/description/brand/unit/images/wholeQuantity/price/status(PENDING|NEGOTIATION|APPROVED|REJECTED)/adminComment/rejectedAt`. No separate `Product` model or `product_ref` — that entity was dropped entirely (commit `87952ba`).
-- **Resolved from the old snapshot:** `status` **is** now in `couldBeUpdated`, and `ProductOfferController.update()` (not `BaseController.update`) enforces who may touch what: the owning `SUPPLIER` may edit product/commercial fields, `ADMIN` may only touch `status`/`adminComment`, on any offer. A rejected offer's `rejectedAt` is kept in sync (set on `REJECTED`, cleared otherwise) and drives a 7-day TTL auto-delete index — a real, working piece of the "historical data" story for this entity.
+- Already implemented: `ProductOffer` directly carries `name/description/brand/unit/images/wholeQuantity/price/status(PENDING|NEGOTIATION|APPROVED|REJECTED)/adminComment/rejectedAt`. No separate `Product` model or `product_ref`.
+- `status` is in `couldBeUpdated`, and `ProductOfferController.update()` (not `BaseController.update`) enforces who may touch what: the owning `SUPPLIER` may edit product/commercial fields, `ADMIN` may only touch `status`/`adminComment`, on any offer. A rejected offer's `rejectedAt` is kept in sync (set on `REJECTED`, cleared otherwise) and drives a 7-day TTL auto-delete index.
 - **Still missing:** there is still no *dedicated* approve/negotiate/reject action — an admin just `PATCH`es `status` directly via the generic split-permission `update()`. Specifically:
   - No atomic "approve creates the Pool" workflow — approving an offer (`status: 'APPROVED'`) is just a field write; creating the matching `Pool` is still a fully separate, uncoordinated `POST /pools` call an admin must remember to make. Nothing links them, nothing validates the Pool's params against the offer's `wholeQuantity`/`price` at creation time.
   - No dedicated "request negotiation" action with a required message, or automatic `Notification` to the supplier when that happens (`Notification.type` doesn't even have a value for it — see §9).
-  - No dedicated "reject" action requiring a reason (an admin can set `status: 'REJECTED'` without `adminComment`, since neither is required together) or automatic supplier notification.
-- Missing: filtering `GET /offers` by `status` — cross-cutting `list()` gap (§11), still applies here (though `list()` at least now filters by caller role — ADMIN sees all, SUPPLIER sees only their own).
+  - No dedicated "reject" action requiring a reason (an admin can set `status: 'REJECTED'` without `adminComment`) or automatic supplier notification.
+- Missing: filtering `GET /offers` by `status` — cross-cutting `list()` gap (§11), still applies here (though `list()` filters by caller role — ADMIN sees all, SUPPLIER sees only their own).
 
 ---
 
 ## 3. Pool Management
 
-- Already implemented: `status: OPEN|TARGET_REACHED|DISTRIBUTING|COMPLETED|CANCELLED`, `couldBeUpdated` includes `status`, `startDate` is now a real schema field (fixed).
-- **Resolved from the old snapshot:** the `OPEN → TARGET_REACHED` transition is no longer entirely unenforced. `PoolParticipantController.create()` now atomically decrements `Pool.currentQuantity` on join and flips `status` to `TARGET_REACHED` the instant it hits exactly 0, using a single-document MongoDB update pipeline (no multi-document transaction — see §11) so concurrent joins can't race past the bound. This is the *only* trigger for that transition, though — an admin manually patching `currentQuantity` down to 0 via `PATCH /pools/:id` does **not** auto-flip status (`PoolController` has no `update()` override; it goes through generic `BaseController.update`), so the transition is join-triggered only, not quantity-triggered in general.
-- Vocabulary note (unchanged from last pass): the enum still has no distinct "successfully wrapped up" terminal state distinct from `CANCELLED` — `COMPLETED` is the closest fit once a `Delivery` finishes, but nothing sets it automatically (see §4).
-- Missing (partially resolved): viewing a pool's participants. `GET /participants?pool_ref=...` now exists and works for `ADMIN` (sees everyone) and is combinable with the caller's own scope for `RETAILER` (sees only their own participation within that pool) — but there is still no way for the pool's owning `SUPPLIER` to list *all* participants of their own pool. `PoolParticipantController.list()`'s filter is `{}` for ADMIN or `{ user_ref: caller }` for everyone else; it never checks "is this pool built from one of my offers."
-- Missing: filtering `GET /pools` by status beyond the built-in role-based visibility rule (ADMIN sees all; RETAILER/anonymous see only `OPEN`; SUPPLIER additionally sees pools from their own offers regardless of status) — there's no way for an ADMIN to ask for just `TARGET_REACHED` pools, for instance. Cross-cutting `list()` gap, §11.
-- Missing: nothing computes/enforces `TARGET_REACHED → DISTRIBUTING → COMPLETED`. `DeliveryController.create()` requires the pool be past `OPEN`/`CANCELLED` to attach a delivery, but creating a delivery doesn't itself move `Pool.status` to `DISTRIBUTING`, and nothing moves it to `COMPLETED` when `Delivery.deliveryStatus` reaches `DELIVERED`. These two are still fully manual `PATCH /pools/:id` calls an admin must remember to make, uncoordinated with the delivery's own state.
+- Already implemented: `status: OPEN|TARGET_REACHED|DISTRIBUTING|COMPLETED|CANCELLED`, `couldBeUpdated` includes `status`, `startDate` is a real schema field.
+- `OPEN → TARGET_REACHED`: `PoolParticipantController.create()` atomically decrements `Pool.currentQuantity` on join and flips `status` to `TARGET_REACHED` the instant it hits exactly 0, using a single-document MongoDB update pipeline (no multi-document transaction needed) so concurrent joins can't race past the bound. An admin manually patching `currentQuantity` down to 0 via `PATCH /pools/:id` does **not** auto-flip status (`PoolController` has no generic `update()` override for that field), so this specific trigger is join-triggered only.
+- **`TARGET_REACHED → DISTRIBUTING → COMPLETED` is now automatic**, closing the gap the 2026-09-02 draft still listed as missing in this section (its own Summary already said otherwise — see Methodology). `DeliveryController.create()` flips the pool to `DISTRIBUTING` the moment a delivery is assigned to a `TARGET_REACHED` pool; `DeliveryController.update()` flips it to `COMPLETED` (and every still-`WAITING` `PoolParticipant` to `DELIVERED`) the moment that delivery's own status transitions into `DELIVERED`. Both syncs are best-effort/logged-on-failure by design (see §11) rather than transactional, since they're secondary bookkeeping alongside the delivery write that must not be blocked by it.
+- Vocabulary note (unchanged): the enum still has no distinct "successfully wrapped up" terminal state distinct from `CANCELLED` — `COMPLETED` is the closest fit and is now actually reached automatically (see above).
+- Missing (partially resolved): viewing a pool's participants. `GET /participants?pool_ref=...` works for `ADMIN` (sees everyone) and for `RETAILER` (sees only their own participation) — but there is still no way for the pool's owning `SUPPLIER` to list *all* participants of their own pool. Re-verified this pass: `PoolParticipantController`'s filter logic still has no `SUPPLIER` branch at all.
+- Missing: filtering `GET /pools` by status beyond the built-in role-based visibility rule — there's no way for an ADMIN to ask for just `TARGET_REACHED` pools, for instance. Cross-cutting `list()` gap, §11.
 
 ---
 
 ## 4. Delivery Assignment
 
-- Unchanged structurally from the last pass, now with a working notification hook: `Delivery.pool_ref` (unique). `DeliveryController.create()` enforces pool exists (404), `Pool.status` not `OPEN`/`CANCELLED` (409), and at most one delivery per pool (409) — then raises `EVENTS.DELIVERY_ASSIGNED`, which `NotificationController.listeners()` turns into two notifications: one to the offer's supplier ("prepare the order"), one to every `PoolParticipant` of that pool ("your delivery is on its way"). This closes the "no notification triggered on delivery creation" gap from the last pass.
+- `Delivery.pool_ref` (unique). `DeliveryController.create()` enforces pool exists (404), `Pool.status` not `OPEN`/`CANCELLED` (409), at most one delivery per pool (409) — then flips the pool to `DISTRIBUTING` and raises `EVENTS.DELIVERY_ASSIGNED`, which `NotificationController.listeners()` turns into two notifications: one to the offer's supplier, one to every `PoolParticipant` of that pool.
+- `DeliveryController.update()` now has real side effects on the `PENDING → DELIVERING → DELIVERED` transition (closing the gap the 2026-09-02 draft still listed as "no notification, no Pool.status update on delivery status change"): the moment `deliveryStatus` transitions into `DELIVERED`, it flips `Pool.status` to `COMPLETED`, flips every still-`WAITING` `PoolParticipant` to `DELIVERED`, and raises `EVENTS.DELIVERY_COMPLETED`, which `SupplierPayoutController.listeners()` turns into an auto-created `SupplierPayout` (§6a).
 - `POST/PATCH/DELETE /deliveries` require `tokenMiddleware` + `requireRole('ADMIN')`. `GET`/`GET :id` require `tokenMiddleware` and are role-scoped: ADMIN sees all; RETAILER sees deliveries for pools they've joined; SUPPLIER sees deliveries for pools built from their own offers (union of both when a caller holds both roles).
-- **Still missing:** no notification (and no `Pool.status` update — see §3) when a delivery's own status changes (`PENDING → DELIVERING → DELIVERED`, via generic `PATCH /deliveries/:id`, which goes through unmodified `BaseController.update` with no side effects at all). Only *assignment* (creation) is wired to anything.
+- **Still missing:** no notification specifically for the delivery status *change itself* (`PENDING → DELIVERING`, and `→ DELIVERED` beyond the payout side effect) — a participant finds out delivery was assigned, but not that it's now en route, short of polling.
 
 ---
 
 ## 5. Complaints
 
-- Unchanged model shape from the last pass: `pool_ref`/`creator_ref`/`title`/`description`/`priority(LOW|MEDIUM|HIGH)`/`status(OPEN|'UNDER REVIEW'|RESOLVED)`/`resolution`.
-- **Resolved from the old snapshot:** `status` **is** now in `couldBeUpdated`, and `ComplaintController.update()` (not generic `BaseController.update`) enforces the split: the filer may only edit `title`/`description`/`priority`; `ADMIN` may edit anything, including `status`/`resolution`, on any complaint. The old "even the existing 3-value status can't be moved via the API" gap is closed.
-- `GET`/`GET :id`/`PATCH :id` require `tokenMiddleware` (role-scoped inside the controller: ADMIN sees/edits all, everyone else only what they filed); `POST` additionally requires `requireRole('RETAILER', 'SUPPLIER')`; `DELETE` requires `requireRole('ADMIN')`. This closes the "PATCH is still unauthenticated" note from the last pass.
-- **Still missing, unchanged:** no conversation/message thread entity (`resolution` is still one free-text field, not a thread — `grep` for "message" under `src/services` still returns nothing complaint-related). No fault-classification field (supplier vs. OrderPool-operations root cause). No automatic `Notification` on complaint state changes (new complaint → admin, supplier implicated → supplier, resolved → retailer) — `Notification.type` still has no complaint-related value (§9).
+- Unchanged model shape: `pool_ref`/`creator_ref`/`title`/`description`/`priority(LOW|MEDIUM|HIGH)`/`status(OPEN|'UNDER REVIEW'|RESOLVED)`/`resolution`.
+- `status` is in `couldBeUpdated`, and `ComplaintController.update()` (not generic `BaseController.update`) enforces the split: the filer may only edit `title`/`description`/`priority`; `ADMIN` may edit anything, including `status`/`resolution`, on any complaint.
+- `GET`/`GET :id`/`PATCH :id` require `tokenMiddleware` (role-scoped inside the controller: ADMIN sees/edits all, everyone else only what they filed); `POST` additionally requires `requireRole('RETAILER', 'SUPPLIER')`; `DELETE` requires `requireRole('ADMIN')`.
+- **Still missing, unchanged:** no conversation/message thread entity (`resolution` is still one free-text field, not a thread — re-verified, no complaint-related message model exists). No fault-classification field (supplier vs. OrderPool-operations root cause). No automatic `Notification` on complaint state changes — `Notification.type` still has no complaint-related value (§9).
 
 ---
 
 ## 6. Supplier Management
 
-- Unchanged from the last pass: suppliers are `User` documents holding `SUPPLIER` in `roles[]` — no separate collection, `GET /users/:id` populates `addresses`.
-- Missing, unchanged: no `?role=SUPPLIER` filtering on `GET /users` (cross-cutting `list()` gap, §11) — `UsersController.list()` still does a bare `this.model.find().select('-password')`, ignoring `req.query` entirely.
-- Missing, unchanged: no aggregated "supplier profile" view — achievable today by filtering `product.offers`/`complaints` by `user_ref`/`creator_ref` per entity, but no convenience endpoint exists.
-- New surface, not in scope of the original spec but relevant here: a `SUPPLIER` can no longer just delete their own account outright — see §12.
+- Unchanged: suppliers are `User` documents holding `SUPPLIER` in `roles[]` — no separate collection, `GET /users/:id` populates `addresses`.
+- Missing, unchanged: no `?role=SUPPLIER` filtering on `GET /users` (cross-cutting `list()` gap, §11) — `UsersController.list()` still does a bare `this.model.find().select('-password')`, ignoring `req.query` entirely (re-verified, no `req.query` reference in `users.controller.ts`).
+- Missing, unchanged: no aggregated "supplier profile" view.
+- A `SUPPLIER` can no longer just delete their own account outright — see §12.
 
 ---
 
-## 7. Supplier Requests — now fully implemented
+## 6a. Supplier Payouts (new section — undocumented until this pass)
 
-**Closed. The prior "no such entity" gap from the 2026-08-28 snapshot is fully resolved — this section previously described §7 and §8 together as missing; both are done.**
+- `SupplierPayout` (`pool_ref`, `amount`, `status: PENDING|COMPLETED|...`, `transactionReference`, `paidAt`) records what a supplier is owed for a completed pool — `amount` is fixed at creation to the offer's agreed `price` (the platform's margin is baked into `Pool.pricePerUnit` set at pool creation, not computed here).
+- **Auto-created**, not something an admin has to remember: `SupplierPayoutController.listeners()` reacts to `EVENTS.DELIVERY_COMPLETED` (raised by `DeliveryController.update()`, see §4) and creates a `PENDING` payout for the pool if one doesn't already exist. `POST /payouts` still exists as an ADMIN-only manual fallback (e.g. if the auto-create path failed because the pool or offer couldn't be found at that moment) — it enforces the delivery is actually `DELIVERED` first (409 otherwise) and that a payout doesn't already exist for the pool (409).
+- `GET`/`GET :id` are role-scoped: ADMIN sees all, SUPPLIER sees only payouts for pools built from their own offers. `PATCH /payouts/:id` (ADMIN only) lets an admin record the actual transfer (`status`/`transactionReference`/`paidAt` — `paidAt` auto-stamped on a transition into `COMPLETED` unless explicitly supplied); on that transition it best-effort syncs `Pool.supplierPaymentStatus` to `PAID` (logged, not blocking, if it fails).
+- **Missing:** Thawani has no vendor/marketplace payout API (verified against its documented surface in `thawani.gateway.ts`'s own comments) — actually moving money to the supplier is a manual transfer outside this codebase; the API only tracks that it happened.
+- **Missing:** no notification to the supplier when a payout is recorded as paid.
 
-- `src/services/supplier.requests/` exists end to end: `supplier.request.model.ts` (`user_ref`, `description`, `status: PENDING|APPROVED|REJECTED`, `adminComment`), controller, Zod schemas, routes, wired into `src/routes/api/v1/index.ts`.
-- The actual design differs from what the old doc assumed (a public, anonymous applicant form with name/email/company/message and an open question about password provisioning): a request is filed by an **already-registered, authenticated `RETAILER`** who isn't already a `SUPPLIER` (`requireRole('RETAILER')` + a controller check blocking existing suppliers), always under their own `user_ref` (never client-supplied). There's no separate applicant identity to provision a password for — the old "open design question" about password generation is moot under this design, since approval just adds a role onto an existing account rather than creating a new one.
-- `POST` creates (blocks a second `PENDING` request per user, 409). `GET`/`GET :id` are role-scoped (ADMIN sees all, RETAILER sees only their own). `PATCH :id` splits permissions: the owning RETAILER may only edit `description`, and only while still `PENDING`; ADMIN may only set `status`/`adminComment`, and only on a still-`PENDING` request. Approving (`status: 'APPROVED'`) does `$addToSet: { roles: 'SUPPLIER' }` on the underlying `User` — additive, never replacing `RETAILER`. `DELETE :id` lets the owner withdraw their own request or ADMIN delete any.
-- Missing: no automatic `Notification`/email when a request is approved/rejected (the applicant has to notice via `GET /supplier-requests` themselves) — `Notification.type` has no value for it (§9), and while email infra (`nodemailer` + `AppBroker`) exists and is proven out (used for registration welcome emails), nothing wires it to this event.
+---
+
+## 7. Supplier Requests — fully implemented
+
+**Closed.**
+
+- `src/services/supplier.requests/` exists end to end: `supplier.request.model.ts` (`user_ref`, `description`, `status: PENDING|APPROVED|REJECTED`, `adminComment`), controller, Zod schemas, routes.
+- A request is filed by an already-registered, authenticated `RETAILER` who isn't already a `SUPPLIER`, always under their own `user_ref`. `POST` creates (blocks a second `PENDING` request per user, 409). `GET`/`GET :id` are role-scoped (ADMIN sees all, RETAILER sees only their own). `PATCH :id` splits permissions: the owning RETAILER may only edit `description`, and only while still `PENDING`; ADMIN may only set `status`/`adminComment`, and only on a still-`PENDING` request. Approving does `$addToSet: { roles: 'SUPPLIER' }` on the underlying `User` — additive, never replacing `RETAILER`. `DELETE :id` lets the owner withdraw their own request or ADMIN delete any.
+- Missing, unchanged: no automatic `Notification`/email when a request is approved/rejected — `Notification.type` has no value for it (§9).
 
 ---
 
@@ -115,72 +139,76 @@ The old doc's §7 and §8 were two views of the same gap (no `SupplierRequest` e
 
 ## 9. Notifications
 
-- Model was restructured since the last pass (see Methodology) — `recipients: [{ user_ref, isRead, readAt }]` instead of a flat `recipient_ref[]` + shared `isRead`/`readAt`, giving genuine per-recipient read state. `NotificationController` has a private `notify()` helper used both by the admin-facing `POST` and by every business-event listener, plus a `scopeToRecipient()` helper that strips every recipient entry except the caller's own before a non-admin ever sees a notification document (so a RETAILER/SUPPLIER can never see who else a notification went to).
-- `type` enum was narrowed to `'DELIVERY_ASSIGNED'` only — the old `PRODUCT_APPROVED`/`NEW OFFER`/`NEW COMPLAINT` values are gone, not extended, and there is no offer-rejected/negotiation-requested/supplier-request-decided/complaint-related value yet. Extending this remains a small, additive change (`src/services/notifications/notification.model.ts`'s `NotificationType` union + schema enum) — the mechanism (`AppBroker` event → `NotificationController.listeners()` → `notify()`) is proven out by the one trigger that exists.
-- `couldBeUpdated` covers ADMIN content edits (`title`/`message`/`actionUrl`/`priority`); a recipient may additionally patch only their own `recipients[].isRead` (and `readAt` is derived server-side, not client-settable) — this is enforced in `update()`, not expressible as a static whitelist.
-- **Resolved from the old snapshot:** one real trigger now exists end to end — `EVENTS.DELIVERY_ASSIGNED`. This is still the *only* wired trigger; every other admin/business action that should notify someone (offer approved/rejected/negotiation-requested, supplier request approved/rejected, complaint filed/resolved, delivery status changed post-assignment) still creates zero notifications, because none of those actions have a corresponding event raised yet — this is a direct consequence of §2/§5/§7's remaining gaps, not an independent notifications-layer problem.
+- `recipients: [{ user_ref, isRead, readAt }]` gives genuine per-recipient read state. `NotificationController` has a private `notify()` helper used both by the admin-facing `POST` and by every business-event listener, plus a `scopeToRecipient()` helper that strips every recipient entry except the caller's own before a non-admin ever sees a notification document.
+- `type` enum is still just `'DELIVERY_ASSIGNED'` — there is no offer-rejected/negotiation-requested/supplier-request-decided/removal-request-decided/complaint-related/payment-related/payout-related value yet, despite all of those now being real events raised on `AppBroker` (`EVENTS.ts` now also has `DELIVERY_COMPLETED`, `PAYMENT_COMPLETED`, `PAYMENT_FAILED`, `PAYMENT_REFUNDED` — none of them currently drive a `Notification`, only `SupplierPayoutController`'s auto-create listens to `DELIVERY_COMPLETED`). Extending this remains a small, additive change (`notification.model.ts`'s `NotificationType` union + schema enum) — the mechanism is proven out by two triggers now (`DELIVERY_ASSIGNED`, and indirectly the payout auto-create), not just one.
+- `couldBeUpdated` covers ADMIN content edits (`title`/`message`/`actionUrl`/`priority`); a recipient may additionally patch only their own `recipients[].isRead` (`readAt` derived server-side).
+- **Still the single wired-to-notifications trigger:** `EVENTS.DELIVERY_ASSIGNED`. Every payment/payout/offer/supplier-request/complaint event that now exists on `AppBroker` still creates zero notifications — this is a direct, mechanical gap (add a listener + a `NotificationType` value per event), not a design problem, since the plumbing itself (`AppBroker` → `listeners()` → `notify()`) is proven and reused already.
 
 ---
 
 ## 10. Historical Data
 
-- The status-based soft-close pattern (`ProductOffer.status`, `Pool.status`, `Complaint.status`, `SupplierRequest.status`, `SupplierRemoveRequest.status`) remains the right mechanism and is well-established now across five entities.
-- **Resolved from the old snapshot.** `DELETE` is now behind `tokenMiddleware` + either `requireRole('ADMIN')` or an owner-or-ADMIN controller check on: `addresses`, `complaints`, `deliveries`, `notifications`, `pool.participants`, `pools`, `product.offers`, `supplier.remove.requests`, `supplier.requests`, `users`. `payments` and `supplier.payouts` — re-verified directly against their route files — never had a `DELETE` route at all (a `Payment`/`SupplierPayout` is a financial record, deliberately never hard-deletable via the API), and both now have full `requireRole` coverage on every route they do expose.
+- The status-based soft-close pattern (`ProductOffer.status`, `Pool.status`, `Complaint.status`, `SupplierRequest.status`, `SupplierRemoveRequest.status`, `Payment.status`, `SupplierPayout.status`) is well-established across seven entities now.
+- `DELETE` is behind `tokenMiddleware` + either `requireRole('ADMIN')` or an owner-or-ADMIN controller check on every entity that exposes it. `payments` and `supplier.payouts` never had a `DELETE` route at all (financial records, deliberately never hard-deletable via the API) and both have full `requireRole` coverage on every route they do expose.
 
 ---
 
 ## 11. Cross-Cutting Gaps
 
-- **Resolved from the old snapshot.** `BaseController.list()` is now the single place list() lives — every subclass that used to reimplement the full try/catch/response-formatting boilerplate now only overrides `buildListFilter(req, res)` (role-scoped filter, or `null` after sending its own response, e.g. a 401), and optionally `listSelect()` (a projection, e.g. `UsersController`'s `-password`) or `transformListDoc(doc, req)` (per-document post-processing, e.g. `NotificationController`'s recipient-redaction). Pagination is opt-in via `?page`/`?limit` (both required, positive integers, `limit` capped at 100) — a caller that omits them gets today's unbounded behavior unchanged, so every existing caller keeps working. There is still no arbitrary client-side field filter (e.g. `GET /offers?status=PENDING` beyond the role scoping) — that would need each `buildListFilter()` to merge in caller-supplied query params, which none do yet.
-- **Resolved from the old snapshot.** `tokenMiddleware`/`requireRole` now cover `payments` and `supplier.payouts` too (`requireRole('ADMIN', 'RETAILER')` and `requireRole('ADMIN', 'SUPPLIER')` respectively, per-route) — re-verified directly against `payments.routes.ts`/`supplier.payouts.routes.ts`, both `payments.routes.test.ts`/`supplier.payouts.routes.test.ts` now exist. Auth coverage is effectively universal across the API at this point.
-- **Resolved from the old snapshot, for two specific flows.** `docker-compose.yml`'s `mongo` service now runs as a single-node replica set (`--replSet rs0`, initiated once by a one-shot `mongo-init` service — see `docs/tech-stack.md`), specifically so Mongoose sessions/transactions work at all; client URIs need `?replicaSet=rs0&directConnection=true` (see `.env.example`). `PoolController.expirePool()` (cancel + Payment/PoolParticipant sweep) and `PaymentController.confirmPaymentById()`/`confirmRefund()` (Payment status flip + its PoolParticipant status flip) now use real multi-document transactions. Still not transactional, deliberately: the pool-join guard (§3, an external Thawani call sits in the middle of that flow — a DB transaction must never stay open across an external HTTP round trip) and the Pool/PoolParticipant lifecycle-status syncs added since (delivery→pool/participant status, payout→pool payment status — all logged-best-effort by design, see each site's comment). Multi-document admin actions this spec still calls for (approve offer → create Pool) still have no transaction wrapping them.
+- **Closed.** `BaseController.list()` is the single place `list()` lives — every subclass overrides `buildListFilter(req, res)` (role-scoped filter, or `null` after sending its own response) and optionally `listSelect()`/`transformListDoc()`. Pagination is opt-in via `?page`/`?limit` (both required, positive integers, `limit` capped at 100). There is still no arbitrary client-side field filter (e.g. `GET /offers?status=PENDING` beyond role scoping) — that would need each `buildListFilter()` to merge in caller-supplied query params, which none do yet (re-verified: no controller reads `req.query` for this purpose).
+- **Closed.** `tokenMiddleware`/`requireRole` cover every route module including `payments` and `supplier.payouts`, with the one deliberate exception of the Thawani webhook (§1/§1b). Auth coverage is complete.
+- **Resolved, for specific flows.** `docker-compose.yml`'s `mongo` service runs as a single-node replica set (`--replSet rs0`), specifically so Mongoose sessions/transactions work. `PoolController.expirePool()` (cancel + Payment/PoolParticipant sweep) and `PaymentController.confirmPaymentById()`/`confirmRefund()` (Payment status flip + its PoolParticipant status flip) use real multi-document transactions. **Still not transactional, deliberately:** the pool-join guard (an external Thawani call sits in the middle of that flow — a DB transaction must never stay open across an external HTTP round trip) and the Pool/PoolParticipant/SupplierPayout lifecycle-status syncs (delivery→pool/participant status in §3/§4, payout→pool payment status in §6a — all logged-best-effort by design). Multi-document admin actions this spec still calls for (approve offer → create Pool, §2) still have no transaction wrapping them, because that workflow doesn't exist yet at all.
 
 ---
 
-## 12. Account Removal Workflow (new since last pass, not in the original spec)
-
-Added this session, follows the same request/approval shape as §7 rather than extending it (different trigger, different reviewer expectations — a removal is higher-stakes than a role grant).
+## 12. Account Removal Workflow (not in the original spec)
 
 - `src/services/supplier.remove.requests/` — model (`user_ref`, `reason`, `status: PENDING|APPROVED|REJECTED`, `adminComment`), controller, Zod update schema, routes. **No `POST` route** — a request is only ever created as a side effect of `AuthController.remove()` (see §1a), never posted directly by a client.
 - `GET`/`GET :id` are role-scoped (ADMIN sees all, everyone else only their own). `PATCH :id` is ADMIN-only; approving deletes the requester's `User` and `Auth` records outright. `DELETE :id` lets the owner withdraw their own still-`PENDING` request, or ADMIN delete any regardless of status.
 - Missing (matches a note already in §7 for the mirror-image role-grant flow): no automatic `Notification`/email when a removal request is approved/rejected.
-- **Explicitly out of scope so far, worth a product decision:** approving a removal request just deletes the `User` — it does not check for open pools, pending payouts, or in-flight `PoolParticipant` rows tied to that supplier first. No referential-integrity check exists anywhere else in the codebase either (consistent with the project's stated "no transactional logic exists yet, add it deliberately" stance), so this wasn't treated as a special case, but it means an admin can currently approve a removal out from under a supplier with an active pool.
+- **Explicitly out of scope so far, worth a product decision:** approving a removal request just deletes the `User` — it does not check for open pools, pending payouts, or in-flight `PoolParticipant` rows tied to that supplier first. No referential-integrity check exists anywhere else in the codebase either, so this wasn't treated as a special case, but it means an admin can currently approve a removal out from under a supplier with an active pool.
 
 ---
 
 ## Summary
 
 ```text
-Already implemented (new or newly-closed since 2026-08-28):
-- Multi-role User.roles[] (additive role grants, requireRole matches any overlap)
-- SupplierRequest: full model/controller/routes/schema, role-scoped, split PATCH permissions, additive role grant on approval
-- ProductOffer: Product entity dropped, offer is now self-contained; status is patchable with owner/admin field-split enforcement; rejectedAt TTL auto-delete
-- Complaint: status/resolution now patchable with owner/admin field-split enforcement
-- Pool: startDate is a real field; OPEN -> TARGET_REACHED now auto-triggered (join-only) via an atomic single-document update
-- Pool join guard: minimumContribution <= quantity <= currentQuantity, no invalid nonzero remainder, race-safe without transactions
-- Delivery -> Notification: DELIVERY_ASSIGNED event wired end to end (supplier + every participant notified)
-- Notification: per-recipient read state (recipients[] replacing flat recipient_ref[])
-- Auth: /auth/logout (clears persisted refresh token, /auth/refresh now checks it) and /auth/remove (retailer: immediate delete; supplier: SupplierRemoveRequest for admin review)
-- SupplierRemoveRequest: full model/controller/routes/schema mirroring SupplierRequest's shape
-- Role-scoped auth now covers addresses, complaints, deliveries, notifications, pool.participants, pools, product.offers, supplier.remove.requests, supplier.requests, users
-- Jest test suite wired up and substantial (23 suites / 335+ tests as of this pass)
+Verified this pass (build/lint/tests actually run, not assumed):
+- npm run build (tsc) — clean, 0 errors
+- npx eslint . — 0 errors, 12 pre-existing no-console warnings (scripts/bootstrap only)
+- npx jest — 35 suites / 507 tests, all passing
 
-Still missing (confirmed still true, re-verified against current code):
+Already implemented and end-to-end wired (the full pool lifecycle runs without manual gluing):
+- Multi-role User.roles[] (additive role grants, requireRole matches any overlap)
+- SupplierRequest / SupplierRemoveRequest: full model/controller/routes/schema, role-scoped, split PATCH permissions
+- ProductOffer: self-contained entity; status patchable with owner/admin field-split enforcement; rejectedAt TTL auto-delete
+- Complaint: status/resolution patchable with owner/admin field-split enforcement
+- Pool: OPEN -> TARGET_REACHED -> DISTRIBUTING -> COMPLETED now all auto-triggered (join, delivery-assigned, delivery-delivered respectively)
+- Pool join guard: minimumContribution <= quantity <= currentQuantity, race-safe without transactions
+- Payment/Thawani: checkout session creation, confirm/cancel/retry-refund/confirm-refund dedicated actions, unauthenticated-by-design webhook that only ever re-verifies against Thawani directly
+- SupplierPayout: auto-created off DELIVERY_COMPLETED, amount fixed at creation, admin records the actual (manual, off-platform) transfer
+- Delivery -> Notification: DELIVERY_ASSIGNED event wired end to end (supplier + every participant notified)
+- Notification: per-recipient read state
+- Auth: /auth/logout, /auth/remove (retailer: immediate delete; supplier: SupplierRemoveRequest for admin review)
+- Auth coverage is complete across the API except the one deliberate Thawani webhook exception
+- Real Mongo transactions (single-node replica set) for expirePool(), payment confirm/refund, keeping Payment+PoolParticipant writes atomic
+- BaseController.list() generic filtering/pagination
+- Jest suite: 35 suites / 507 tests, all green
+
+Still missing (confirmed still true, re-verified against current code this pass):
 - Approve-offer workflow that atomically creates the Pool (still two uncoordinated calls)
 - Request-negotiation / reject-offer dedicated actions + supplier notifications
-- Arbitrary client-side list() filters (e.g. `?status=`) beyond role scoping — `buildListFilter()` gives every controller one place to add this, but none do yet
+- Arbitrary client-side list() filters (e.g. `?status=`) beyond role scoping
 - SUPPLIER-visible "participants of my own pool" listing (admin-only and self-only today)
-- Notification on delivery status change post-assignment (PENDING -> DELIVERING -> DELIVERED)
-- Complaint conversation/message thread; supplier-vs-OrderPool fault classification; complaint-driven notifications
+- Notification.type coverage for offer-rejected/negotiation-requested/supplier-request-decided/removal-request-decided/complaint/payment/payout events (only DELIVERY_ASSIGNED is wired to a notification today, despite 5 business events now existing on AppBroker)
+- Notification specifically for a delivery's own status change (PENDING -> DELIVERING), separate from the DELIVERED side effects
+- Complaint conversation/message thread; supplier-vs-OrderPool fault classification
 - Supplier-by-role filtering (?role=SUPPLIER) / supplier profile aggregation
-- Notification.type coverage for offer-rejected/negotiation-requested/supplier-request-decided/removal-request-decided/complaint events
 - Referential-integrity check before approving a SupplierRemoveRequest (open pools/payouts not checked)
-
-Resolved since the above was written (auth, transactions, pool lifecycle, list()):
-- Auth/authz now covers payments and supplier.payouts (requireRole per route, verified against payments.routes.ts/supplier.payouts.routes.ts + their route tests)
-- Mongoose sessions/transactions now used in PoolController.expirePool() and PaymentController.confirmPaymentById()/confirmRefund() — mongo runs as a single-node replica set specifically for this (see docs/tech-stack.md)
-- TARGET_REACHED -> DISTRIBUTING -> COMPLETED pool transitions now drive automatically off delivery creation/completion (see the Pool entity note in docs/project-scope.md)
-- BaseController.list() generic filtering/pagination (see the resolved bullet above)
+- RETAILER self-deletion doesn't check for open PoolParticipant/pending payment rows before hard-deleting
+- No access-token blacklist/revocation (logout only clears the refresh token)
+- No Thawani webhook signature verification (accepted gap, re-confirm against current Thawani docs before real money moves through it)
+- No payment-level timeout independent of pool expiry (a PENDING payment only gets swept up if/when its pool expires)
 
 Needs model:
 - ComplaintMessage / complaint conversation entity (still not started)
@@ -199,6 +227,6 @@ Needs validation:
 - Zod schemas for every new route above
 
 Needs notification:
-- Notification.type enum extended for: offer negotiation requested, offer rejected, supplier request approved/rejected, removal request approved/rejected, delivery status changed, complaint filed/resolved
-- Trigger points (AppBroker events + listeners) wired into each new controller action above, following the DELIVERY_ASSIGNED pattern already proven out
+- Notification.type enum extended for: offer negotiation requested, offer rejected, supplier request approved/rejected, removal request approved/rejected, delivery status changed, complaint filed/resolved, payment completed/failed/refunded, payout completed
+- Trigger points (listeners) wired into each new/existing controller action above, following the DELIVERY_ASSIGNED / DELIVERY_COMPLETED pattern already proven out twice
 ```
