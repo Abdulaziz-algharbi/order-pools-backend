@@ -3,10 +3,21 @@ import mongoose from 'mongoose';
 import BaseController from '../base/base.controller';
 import ERRORS from '../../constants/ERRORS';
 import productOfferModel from '../product.offers/product.offer.model';
+import userModel from '../users/user.model';
 import paymentModel from '../payments/payment.model';
 import poolParticipantModel from '../pool.participants/pool.participant.model';
 import thawaniGateway from '../thawani/thawani.gateway';
 import Pool, { couldBeUpdated } from './pool.model';
+
+// Participants that still hold (or once held and completed) a real claim
+// on the pool's quantity — a failed/never-completed checkout or a
+// withdrawn-and-refunded participant shouldn't count toward the "N joined"
+// figure shown to visitors.
+const COUNTED_PARTICIPANT_STATUSES = [
+  'PENDING_PAYMENT',
+  'WAITING',
+  'DELIVERED',
+];
 
 class PoolController extends BaseController {
   constructor() {
@@ -18,6 +29,120 @@ class PoolController extends BaseController {
   // (ProductOffer.user_ref -> Pool.productoffer_ref).
   private async ownOfferIds(userId: string) {
     return productOfferModel.distinct('_id', { user_ref: userId });
+  }
+
+  // Pool ids this retailer has ever joined (any PoolParticipant status) —
+  // used to keep a pool visible to the retailer who's actually in it after
+  // it moves past OPEN (TARGET_REACHED/DISTRIBUTING/COMPLETED/CANCELLED),
+  // since otherwise they'd lose the ability to track or dispute an order
+  // the moment it stops collecting. Mirrors ownOfferIds() for SUPPLIER.
+  private async ownParticipantPoolIds(userId: string) {
+    return poolParticipantModel.distinct('pool_ref', { user_ref: userId });
+  }
+
+  private async participantCounts(
+    poolIds: mongoose.Types.ObjectId[]
+  ): Promise<Map<string, number>> {
+    const rows = await poolParticipantModel.aggregate([
+      {
+        $match: {
+          pool_ref: { $in: poolIds },
+          status: { $in: COUNTED_PARTICIPANT_STATUSES },
+        },
+      },
+      { $group: { _id: '$pool_ref', count: { $sum: 1 } } },
+    ]);
+    return new Map(rows.map((row) => [row._id.toString(), row.count]));
+  }
+
+  // A pool is only ever built from an APPROVED offer — the offer's
+  // display fields (name/description/image/unit) and its supplier's
+  // company name are snapshotted onto the pool at creation time, since a
+  // RETAILER (who needs to see them to decide whether to join) has no
+  // read access to ProductOffer, which also carries the supplier's
+  // wholesale price. targetQuantity is fixed to the pool's starting
+  // capacity so a "collected so far" progress figure has a stable
+  // denominator even as currentQuantity counts down.
+  async create(req: Request, res: Response): Promise<void> {
+    try {
+      const offer = await productOfferModel.findById(req.body.productoffer_ref);
+      if (!offer) {
+        res.status(404).send({ message: 'Product offer not found' });
+        return;
+      }
+      if (offer.status !== 'APPROVED') {
+        res.status(409).send({
+          message: 'A pool can only be created from an APPROVED offer',
+        });
+        return;
+      }
+
+      const supplier = await userModel.findById(offer.user_ref);
+
+      req.body.productName = offer.name;
+      req.body.productDescription = offer.description;
+      req.body.productImageUrl = offer.images ?? null;
+      req.body.unit = offer.unit;
+      req.body.supplierName = supplier?.companyName ?? null;
+      req.body.targetQuantity = req.body.currentQuantity;
+
+      await super.create(req, res);
+    } catch (error) {
+      this.errorHandler(error, req, res);
+    }
+  }
+
+  // Mirrors BaseController.list()'s opt-in ?page/?limit pagination (see
+  // base.controller.ts), with participantCount attached to each doc —
+  // duplicated rather than reused since the base implementation sends its
+  // own response and has no post-processing hook that supports an async
+  // per-batch step like the count aggregation below.
+  async list(req: Request, res: Response): Promise<void> {
+    try {
+      const filter = await this.buildListFilter(req, res);
+      if (filter === null) return;
+
+      const q = (req.query ?? {}) as Record<string, unknown>;
+      const rawPage = Number(q.page);
+      const rawLimit = Number(q.limit);
+      const pagination =
+        Number.isInteger(rawPage) &&
+        Number.isInteger(rawLimit) &&
+        rawPage >= 1 &&
+        rawLimit >= 1
+          ? { page: rawPage, limit: Math.min(rawLimit, 100) }
+          : null;
+
+      let query = this.model.find(filter);
+      if (pagination) {
+        query = query
+          .skip((pagination.page - 1) * pagination.limit)
+          .limit(pagination.limit);
+      }
+
+      const docs = await query;
+      const counts = await this.participantCounts(docs.map((doc) => doc._id));
+      const data = docs.map((doc) => ({
+        ...doc.toObject(),
+        participantCount: counts.get(doc._id.toString()) ?? 0,
+      }));
+
+      const total = pagination
+        ? await this.model.countDocuments(filter)
+        : data.length;
+
+      this.logger.info(`${this.model.modelName} Retrieved`);
+      res.status(200).send({
+        message: 'Documents retrieved successfully',
+        data,
+        total,
+        ...(pagination
+          ? { page: pagination.page, limit: pagination.limit }
+          : {}),
+      });
+    } catch (error) {
+      this.errorHandler(error, req, res);
+    }
   }
 
   // Anonymous callers and a caller with RETAILER see OPEN (actively
@@ -36,6 +161,11 @@ class PoolController extends BaseController {
     const conditions: Record<string, unknown>[] = [];
     if (!user || user.roles.includes('RETAILER')) {
       conditions.push({ status: 'OPEN' });
+    }
+    if (user?.roles.includes('RETAILER')) {
+      conditions.push({
+        _id: { $in: await this.ownParticipantPoolIds(user.userId) },
+      });
     }
     if (user?.roles.includes('SUPPLIER')) {
       conditions.push({
@@ -60,6 +190,11 @@ class PoolController extends BaseController {
         let visible =
           doc.status === 'OPEN' && (!user || user.roles.includes('RETAILER'));
 
+        if (!visible && user?.roles.includes('RETAILER')) {
+          const poolIds = await this.ownParticipantPoolIds(user.userId);
+          visible = poolIds.some((id) => id.toString() === doc._id.toString());
+        }
+
         if (!visible && user?.roles.includes('SUPPLIER')) {
           const offerIds = await this.ownOfferIds(user.userId);
           visible = offerIds.some(
@@ -73,9 +208,13 @@ class PoolController extends BaseController {
         }
       }
 
+      const counts = await this.participantCounts([doc._id]);
       res.status(200).send({
         message: 'Document retrieved successfully',
-        data: doc,
+        data: {
+          ...doc.toObject(),
+          participantCount: counts.get(doc._id.toString()) ?? 0,
+        },
       });
     } catch (error) {
       this.errorHandler(error, req, res);

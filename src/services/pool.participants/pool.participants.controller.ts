@@ -157,7 +157,12 @@ class PoolParticipantController extends BaseController {
               },
             },
           },
-        ]
+        ],
+        // Mongoose 9 requires this explicit opt-in whenever the update
+        // argument is an aggregation pipeline (an array) rather than a
+        // plain update-operator object, to rule out passing an array by
+        // mistake.
+        { updatePipeline: true }
       );
 
       if (!claimedPool) {
@@ -177,10 +182,15 @@ class PoolParticipantController extends BaseController {
         const amount = quantity * pool.pricePerUnit;
 
         // `new Model()` assigns `_id` locally without hitting the DB, so
-        // it's available as Thawani's client_reference_id before the
-        // payment doc (which needs the session id it returns) is saved.
+        // both docs' ids are available to cross-reference each other
+        // (Payment.poolParticipant_ref and PoolParticipant.payment_ref are
+        // both required) before either is actually saved, and paymentId is
+        // available as Thawani's client_reference_id up front too.
+        const participant = new this.model({ ...req.body });
+
         const payment = new paymentModel({
           pool_ref,
+          poolParticipant_ref: participant._id,
           user_ref,
           amount,
           thawaniSessionId: 'pending',
@@ -205,10 +215,7 @@ class PoolParticipantController extends BaseController {
         payment.thawaniSessionId = session.session_id;
         await payment.save();
 
-        const participant = new this.model({
-          ...req.body,
-          payment_ref: payment._id,
-        });
+        participant.payment_ref = payment._id;
         const savedParticipant = await participant.save();
 
         this.logger.info(`${this.model.modelName} created`);

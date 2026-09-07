@@ -17,6 +17,11 @@ export type CreatePoolInput = z.infer<typeof createPoolSchema>;
 // mirrors pool.model.ts `couldBeUpdated` — keep both in sync
 export const updatePoolSchema = z
   .object({
+    productName: z.string().trim().min(1).max(150).optional(),
+    productDescription: z.string().trim().min(1).max(2000).optional(),
+    productImageUrl: z.string().nullable().optional(),
+    unit: z.enum(['PIECE', 'KG', 'BOX', 'CARTON']).optional(),
+    supplierName: z.string().trim().min(1).max(150).nullable().optional(),
     currentQuantity: z.number().nonnegative().optional(),
     minimumContribution: z.number().positive().optional(),
     pricePerUnit: z.number().positive().optional(),
