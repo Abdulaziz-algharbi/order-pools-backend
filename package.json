@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "build": "npx tsc",
-    "start": "node ./dist/app.js",
+    "start": "node ./dist/src/server.js",
     "dev": "ts-node-dev --files --respawn src/server.ts",
     "test": "jest",
     "seed:admins": "ts-node --files scripts/seed-admins.ts",
