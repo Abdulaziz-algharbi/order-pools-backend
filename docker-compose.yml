@@ -11,6 +11,16 @@ services:
   # DNS name), which isn't reachable from the host; without it, the driver
   # would try to "discover" that address and fail to reconnect after the
   # initial handshake.
+  # Host port stays published: the native (non-Docker) dev workflow —
+  # `npm run dev` for both backend and frontend, per this repo's own
+  # CLAUDE.md — connects here via `localhost:27017` outside any compose
+  # network, and has no other way to reach this container. Only the
+  # dockerized `backend` service needs the internal `mongo:27017` route;
+  # dropping this publish for a "hardened" default would silently break
+  # that native workflow every time this file changes, which isn't worth
+  # it for a database that only matters locally today. Revisit when this
+  # ever runs somewhere the native workflow doesn't apply (staging/prod
+  # compose file, no host port there).
   mongo:
     image: mongo:6
     command: ['--replSet', 'rs0', '--bind_ip_all']
@@ -64,6 +74,45 @@ services:
       ME_CONFIG_BASICAUTH_PASSWORD: passpass
     ports:
       - 8081:8081
+
+  # The API. No host port published — only `nginx` (same `internal`
+  # network) talks to it, at backend:8000. DEV_MONGO_URI/FRONTEND_URL are
+  # overridden here (docker-compose `environment:` wins over `env_file:`
+  # for the same key) because inside this network the DB is reachable as
+  # `mongo`, not `localhost`, and the browser-facing origin is nginx's,
+  # not the bare Vite dev server's.
+  backend:
+    build: .
+    env_file: .env
+    environment:
+      PORT: '8000'
+      APP_MODE: DEV
+      DEV_MONGO_URI: mongodb://mongo:27017/order-pool?replicaSet=rs0&directConnection=true
+      FRONTEND_URL: https://localhost
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - internal
+
+  # TLS termination, static frontend, and reverse proxy to `backend` — see
+  # nginx.conf in order-pools-app (this build context). Requires a dev
+  # cert first: run certs/generate-dev-certs.sh once before `up`; swap in
+  # a real certificate before deploying anywhere but localhost.
+  nginx:
+    build:
+      context: ../order-pools-app
+      dockerfile: Dockerfile
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - ./certs:/etc/nginx/certs:ro
+    networks:
+      - internal
 
 volumes:
   data:

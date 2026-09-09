@@ -16,6 +16,11 @@ import logger from './logger/logger';
 
 const app = express();
 
+// Trusts exactly one hop upstream (the nginx reverse proxy) so req.ip /
+// req.protocol reflect the real client from X-Forwarded-For/-Proto
+// instead of the proxy itself.
+app.set('trust proxy', 1);
+
 app.use(express.json());
 app.use(morgan('dev'));
 app.use(cors({ origin: config.frontendUrl }));

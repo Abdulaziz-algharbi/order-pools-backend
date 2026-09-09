@@ -11,3 +11,7 @@ dist
 # Logs
 logs/
 *.log
+
+# dev-only self-signed TLS material (see certs/generate-dev-certs.sh) —
+# never commit a private key, even a throwaway dev one
+certs/*.pem
