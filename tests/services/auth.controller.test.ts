@@ -37,12 +37,28 @@ jest.mock(
   }
 );
 
+const mockUserSave = jest.fn();
+
+jest.mock('../../src/services/users/user.model', () => {
+  const MockUserModel: any = jest.fn().mockImplementation(function (
+    this: any,
+    data: any
+  ) {
+    Object.assign(this, data);
+    this.save = mockUserSave;
+  });
+  MockUserModel.modelName = 'User';
+  MockUserModel.findOne = jest.fn();
+  MockUserModel.findById = jest.fn();
+  MockUserModel.deleteOne = jest.fn();
+  return { __esModule: true, default: MockUserModel };
+});
+
 import authController from '../../src/services/auth/auth.controller';
 import authModel from '../../src/services/auth/auth.model';
 import supplierRemoveRequestModel from '../../src/services/supplier.remove.requests/supplier.remove.request.model';
-import appRegistry from '../../src/app.registry';
+import mockUserModel from '../../src/services/users/user.model';
 import appBroker from '../../src/app.broker';
-import REGISTRY from '../../src/constants/REGISTRY';
 import jwtUtil from '../../src/utils/jwt.util';
 import ERRORS from '../../src/constants/ERRORS';
 
@@ -53,6 +69,9 @@ const mockAuthUpdateOne = authModel.updateOne as unknown as jest.Mock;
 const mockAuthDeleteOne = authModel.deleteOne as unknown as jest.Mock;
 const mockSupplierRemoveRequestFindOne =
   supplierRemoveRequestModel.findOne as unknown as jest.Mock;
+const mockUserFindOne = mockUserModel.findOne as unknown as jest.Mock;
+const mockUserFindById = mockUserModel.findById as unknown as jest.Mock;
+const mockUserDeleteOne = mockUserModel.deleteOne as unknown as jest.Mock;
 
 // A minimal thenable mock for chained Mongoose queries (findById().select()).
 function mockQuery(result: unknown) {
@@ -65,30 +84,6 @@ function mockQuery(result: unknown) {
   return query;
 }
 
-const mockUserSave = jest.fn();
-
-function makeUserModel() {
-  const MockUserModel: any = jest.fn().mockImplementation(function (
-    this: any,
-    data: any
-  ) {
-    Object.assign(this, data);
-    this.save = mockUserSave;
-  });
-  MockUserModel.modelName = 'User';
-  MockUserModel.findOne = jest.fn();
-  MockUserModel.findById = jest.fn();
-  MockUserModel.deleteOne = jest.fn();
-  return MockUserModel;
-}
-
-let mockUserModel: any;
-
-beforeEach(() => {
-  mockUserModel = makeUserModel();
-  appRegistry.register(REGISTRY.USER_MODEL, mockUserModel);
-});
-
 function mockRes() {
   const res: Partial<Response> = {};
   res.status = jest.fn().mockReturnValue(res);
@@ -99,7 +94,7 @@ function mockRes() {
 
 describe('AuthController.register', () => {
   it('returns 409 when the email is already registered', async () => {
-    mockUserModel.findOne.mockResolvedValue({ _id: 'existing' });
+    mockUserFindOne.mockResolvedValue({ _id: 'existing' });
     const req = {
       body: { email: 'a@b.com', firstName: 'A' },
     } as unknown as Request;
@@ -107,14 +102,14 @@ describe('AuthController.register', () => {
 
     await authController.register(req, res);
 
-    expect(mockUserModel.findOne).toHaveBeenCalledWith({ email: 'a@b.com' });
+    expect(mockUserFindOne).toHaveBeenCalledWith({ email: 'a@b.com' });
     expect(res.status).toHaveBeenCalledWith(409);
     expect(res.send).toHaveBeenCalledWith({ message: ERRORS.CONFLICT });
     expect(mockUserSave).not.toHaveBeenCalled();
   });
 
   it('creates the user and auth record, emits user:registered, and returns tokens', async () => {
-    mockUserModel.findOne.mockResolvedValue(null);
+    mockUserFindOne.mockResolvedValue(null);
     mockUserSave.mockResolvedValue({
       _id: 'user-1',
       email: 'a@b.com',
@@ -153,7 +148,7 @@ describe('AuthController.register', () => {
   });
 
   it('routes an unexpected failure through errorHandler instead of throwing', async () => {
-    mockUserModel.findOne.mockRejectedValue(new Error('db is down'));
+    mockUserFindOne.mockRejectedValue(new Error('db is down'));
     const req = { body: { email: 'a@b.com' } } as unknown as Request;
     const res = mockRes();
 
@@ -168,7 +163,7 @@ describe('AuthController.register', () => {
 
 describe('AuthController.login', () => {
   it('returns 404 when no user matches the given email', async () => {
-    mockUserModel.findOne.mockResolvedValue(null);
+    mockUserFindOne.mockResolvedValue(null);
     const req = {
       body: { email: 'missing@b.com', password: 'x' },
     } as unknown as Request;
@@ -182,7 +177,7 @@ describe('AuthController.login', () => {
   });
 
   it('returns 401 when the password does not match', async () => {
-    mockUserModel.findOne.mockResolvedValue({
+    mockUserFindOne.mockResolvedValue({
       _id: 'user-1',
       password: bcrypt.hashSync('correct-password', 4),
       roles: ['RETAILER'],
@@ -202,7 +197,7 @@ describe('AuthController.login', () => {
   });
 
   it('rotates the refresh token and returns tokens on a correct password', async () => {
-    mockUserModel.findOne.mockResolvedValue({
+    mockUserFindOne.mockResolvedValue({
       _id: 'user-1',
       password: bcrypt.hashSync('correct-password', 4),
       roles: ['RETAILER', 'SUPPLIER'],
@@ -246,11 +241,11 @@ describe('AuthController.me', () => {
     expect(res.json).toHaveBeenCalledWith({
       message: 'Access token is missing',
     });
-    expect(mockUserModel.findById).not.toHaveBeenCalled();
+    expect(mockUserFindById).not.toHaveBeenCalled();
   });
 
   it("returns 404 when the token's account no longer exists", async () => {
-    mockUserModel.findById.mockReturnValue(mockQuery(null));
+    mockUserFindById.mockReturnValue(mockQuery(null));
     const req = {
       meta: { user: { userId: 'ghost-1', roles: ['RETAILER'] } },
     } as Request;
@@ -258,7 +253,7 @@ describe('AuthController.me', () => {
 
     await authController.me(req, res);
 
-    expect(mockUserModel.findById).toHaveBeenCalledWith('ghost-1');
+    expect(mockUserFindById).toHaveBeenCalledWith('ghost-1');
     expect(res.status).toHaveBeenCalledWith(404);
     expect(res.json).toHaveBeenCalledWith({
       message: 'The account associated with this session no longer exists',
@@ -267,7 +262,7 @@ describe('AuthController.me', () => {
 
   it('returns the user, password excluded via select', async () => {
     const query = mockQuery({ _id: 'user-1', email: 'a@b.com' });
-    mockUserModel.findById.mockReturnValue(query);
+    mockUserFindById.mockReturnValue(query);
     const req = {
       meta: { user: { userId: 'user-1', roles: ['RETAILER'] } },
     } as Request;
@@ -283,7 +278,7 @@ describe('AuthController.me', () => {
   });
 
   it('routes an unexpected failure through errorHandler', async () => {
-    mockUserModel.findById.mockImplementation(() => {
+    mockUserFindById.mockImplementation(() => {
       throw new Error('db is down');
     });
     const req = {
@@ -403,11 +398,11 @@ describe('AuthController.remove', () => {
     await authController.remove(req, res);
 
     expect(res.status).toHaveBeenCalledWith(401);
-    expect(mockUserModel.deleteOne).not.toHaveBeenCalled();
+    expect(mockUserDeleteOne).not.toHaveBeenCalled();
   });
 
   it('deletes the user and auth record immediately for a RETAILER-only caller', async () => {
-    mockUserModel.deleteOne.mockResolvedValue({});
+    mockUserDeleteOne.mockResolvedValue({});
     mockAuthDeleteOne.mockResolvedValue({});
     const req = {
       meta: { user: { userId: 'user-1', roles: ['RETAILER'] } },
@@ -417,7 +412,7 @@ describe('AuthController.remove', () => {
 
     await authController.remove(req, res);
 
-    expect(mockUserModel.deleteOne).toHaveBeenCalledWith({ _id: 'user-1' });
+    expect(mockUserDeleteOne).toHaveBeenCalledWith({ _id: 'user-1' });
     expect(mockAuthDeleteOne).toHaveBeenCalledWith({ userId: 'user-1' });
     expect(mockSupplierRemoveRequestSave).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(200);
@@ -440,7 +435,7 @@ describe('AuthController.remove', () => {
         reason: 'Closing my wholesale business',
       })
     );
-    expect(mockUserModel.deleteOne).not.toHaveBeenCalled();
+    expect(mockUserDeleteOne).not.toHaveBeenCalled();
     expect(mockAuthDeleteOne).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(201);
   });

@@ -5,13 +5,11 @@ import cors from 'cors';
 import appRoutes from './app.routes';
 import config from './config/config';
 
-// registry
-import REGISTRY from './constants/REGISTRY';
-import appRegistry from './app.registry';
-
 // services
-import usersService from './services/users';
-import emailsService from './services/emails';
+// `emails` has no routes of its own — this import's only job is to load
+// the singleton so its listeners() hook (BaseController's constructor)
+// subscribes to `user:registered` on AppBroker before anything can emit it.
+import './services/emails';
 import logger from './logger/logger';
 
 const app = express();
@@ -24,13 +22,6 @@ app.set('trust proxy', 1);
 app.use(express.json());
 app.use(morgan('dev'));
 app.use(cors({ origin: config.frontendUrl }));
-
-// register services in the app registry
-// models
-appRegistry.register(REGISTRY.USER_MODEL, usersService.model);
-// controllers
-appRegistry.register(REGISTRY.USERS_CONTROLLER, usersService.controller);
-appRegistry.register(REGISTRY.EMAILS_CONTROLLER, emailsService.controller);
 
 app.use(appRoutes);
 

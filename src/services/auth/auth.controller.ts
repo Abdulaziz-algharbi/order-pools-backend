@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import BaseController from '../base/base.controller';
 import AuthModel from './auth.model';
 import supplierRemoveRequestModel from '../supplier.remove.requests/supplier.remove.request.model';
+import userModel from '../users/user.model';
 
 class AuthController extends BaseController {
   constructor() {
@@ -12,7 +13,6 @@ class AuthController extends BaseController {
   async register(req: Request, res: Response) {
     try {
       // const { firstName, lastName, email, phoneNumber, companyName, password } = req.body;
-      const userModel = this.registry.get(this.REGISTRY.USER_MODEL);
       const existing = await userModel.findOne({ email: req.body.email });
       if (existing) throw new Error(this.ERRORS.CONFLICT);
       const user = new userModel({
@@ -53,7 +53,6 @@ class AuthController extends BaseController {
     // rotate refresh token
     try {
       const { email, password } = req.body;
-      const userModel = this.registry.get(this.REGISTRY.USER_MODEL);
       const user = await userModel.findOne({ email });
       if (!user) throw new Error(this.ERRORS.USER_NOT_FOUND);
 
@@ -88,7 +87,6 @@ class AuthController extends BaseController {
         res.status(401).json({ message: 'Access token is missing' });
         return;
       }
-      const userModel = this.registry.get(this.REGISTRY.USER_MODEL);
       const user = await userModel.findById(userId).select('-password');
       if (!user) {
         // Not ERRORS.USER_NOT_FOUND — that message is specific to a failed
@@ -224,7 +222,6 @@ class AuthController extends BaseController {
         return;
       }
 
-      const userModel = this.registry.get(this.REGISTRY.USER_MODEL);
       await userModel.deleteOne({ _id: user.userId });
       await this.model.deleteOne({ userId: user.userId });
 
