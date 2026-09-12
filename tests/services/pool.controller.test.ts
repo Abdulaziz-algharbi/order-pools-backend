@@ -24,7 +24,17 @@ jest.mock(
   '../../src/services/pool.participants/pool.participant.model',
   () => ({
     __esModule: true,
-    default: { updateMany: jest.fn() },
+    // `aggregate` backs PoolController.participantCounts() (used by both
+    // list() and getById() to attach a computed participantCount) — without
+    // it, every list()/getById() call throws and falls through to a 500.
+    default: {
+      updateMany: jest.fn(),
+      aggregate: jest.fn().mockResolvedValue([]),
+      // Backs PoolController.ownParticipantPoolIds() — used to keep a pool
+      // visible to a RETAILER who has already joined it, even once it moves
+      // past OPEN.
+      distinct: jest.fn().mockResolvedValue([]),
+    },
   })
 );
 
@@ -50,6 +60,8 @@ const mockPaymentFind = paymentModel.find as unknown as jest.Mock;
 const mockPaymentUpdateMany = paymentModel.updateMany as unknown as jest.Mock;
 const mockParticipantUpdateMany =
   poolParticipantModel.updateMany as unknown as jest.Mock;
+const mockParticipantDistinct =
+  poolParticipantModel.distinct as unknown as jest.Mock;
 
 // expirePool() wraps the pool-cancel + Payment/PoolParticipant sweep in a
 // real mongoose transaction (see pool.controller.ts) — mongoose.startSession()
@@ -72,9 +84,24 @@ function mockRes() {
   return res as Response;
 }
 
+// PoolController.list()/getById() spread `doc.toObject()` onto the response
+// (to attach the computed participantCount alongside the pool's real
+// fields) — a real Mongoose document has that method, a bare object
+// literal doesn't. Wrap a literal in this so it behaves like one.
+function mockDoc<T extends Record<string, unknown>>(
+  fields: T
+): T & { toObject: () => T } {
+  return {
+    ...fields,
+    toObject() {
+      return fields;
+    },
+  };
+}
+
 describe('PoolController.list', () => {
   it('shows only OPEN pools to an anonymous caller', async () => {
-    mockFind.mockResolvedValue([{ _id: '1', status: 'OPEN' }]);
+    mockFind.mockResolvedValue([mockDoc({ _id: '1', status: 'OPEN' })]);
     const req = { meta: { user: undefined } } as unknown as Request;
     const res = mockRes();
 
@@ -84,7 +111,12 @@ describe('PoolController.list', () => {
     expect(res.status).toHaveBeenCalledWith(200);
   });
 
-  it('shows only OPEN pools to a RETAILER', async () => {
+  // A RETAILER sees OPEN pools *plus* any pool they've already joined,
+  // regardless of its current status (PoolController.buildListFilter) — so
+  // the pool-scoping half of ownParticipantPoolIds() always runs for them,
+  // matching ownOfferIds() for a SUPPLIER below.
+  it('shows OPEN pools plus pools already joined to a RETAILER', async () => {
+    mockParticipantDistinct.mockResolvedValue(['pool-9']);
     mockFind.mockResolvedValue([]);
     const req = {
       meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
@@ -93,7 +125,12 @@ describe('PoolController.list', () => {
 
     await poolController.list(req, res);
 
-    expect(mockFind).toHaveBeenCalledWith({ status: 'OPEN' });
+    expect(mockParticipantDistinct).toHaveBeenCalledWith('pool_ref', {
+      user_ref: 'retailer-1',
+    });
+    expect(mockFind).toHaveBeenCalledWith({
+      $or: [{ status: 'OPEN' }, { _id: { $in: ['pool-9'] } }],
+    });
     expect(mockOfferDistinct).not.toHaveBeenCalled();
   });
 
@@ -116,7 +153,7 @@ describe('PoolController.list', () => {
   });
 
   it('returns every pool for ADMIN, with no filter at all', async () => {
-    mockFind.mockResolvedValue([{ _id: '1' }, { _id: '2' }]);
+    mockFind.mockResolvedValue([mockDoc({ _id: '1' }), mockDoc({ _id: '2' })]);
     const req = {
       meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
     } as Request;
@@ -143,7 +180,7 @@ describe('PoolController.getById', () => {
   });
 
   it('lets an anonymous caller view an OPEN pool', async () => {
-    mockFindById.mockResolvedValue({ status: 'OPEN' });
+    mockFindById.mockResolvedValue(mockDoc({ _id: '1', status: 'OPEN' }));
     const req = {
       meta: { user: undefined },
       params: { _id: '1' },
@@ -169,7 +206,13 @@ describe('PoolController.getById', () => {
   });
 
   it('blocks a RETAILER from a non-OPEN pool', async () => {
-    mockFindById.mockResolvedValue({ status: 'CANCELLED' });
+    // Explicit, not relying on the mock's factory default: a real
+    // findById() result always carries _id, and a prior test in this file
+    // may have left poolParticipantModel.distinct's mocked return value set
+    // to a non-empty array (clearMocks only clears call history, not a
+    // previously configured mockResolvedValue).
+    mockParticipantDistinct.mockResolvedValue([]);
+    mockFindById.mockResolvedValue({ _id: 'pool-1', status: 'CANCELLED' });
     const req = {
       meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
@@ -182,7 +225,7 @@ describe('PoolController.getById', () => {
   });
 
   it('lets a RETAILER view an OPEN pool', async () => {
-    mockFindById.mockResolvedValue({ status: 'OPEN' });
+    mockFindById.mockResolvedValue(mockDoc({ _id: '1', status: 'OPEN' }));
     const req = {
       meta: { user: { userId: 'retailer-1', roles: ['RETAILER'] } },
       params: { _id: '1' },
@@ -212,10 +255,13 @@ describe('PoolController.getById', () => {
   });
 
   it('lets a SUPPLIER view their own pool regardless of status', async () => {
-    mockFindById.mockResolvedValue({
-      status: 'CANCELLED',
-      productoffer_ref: { toString: () => 'offer-1' },
-    });
+    mockFindById.mockResolvedValue(
+      mockDoc({
+        _id: '1',
+        status: 'CANCELLED',
+        productoffer_ref: { toString: () => 'offer-1' },
+      })
+    );
     mockOfferDistinct.mockResolvedValue(['offer-1']);
     const req = {
       meta: { user: { userId: 'supplier-1', roles: ['SUPPLIER'] } },
@@ -229,7 +275,7 @@ describe('PoolController.getById', () => {
   });
 
   it('lets ADMIN view any pool regardless of status', async () => {
-    mockFindById.mockResolvedValue({ status: 'CANCELLED' });
+    mockFindById.mockResolvedValue(mockDoc({ _id: '1', status: 'CANCELLED' }));
     const req = {
       meta: { user: { userId: 'admin-1', roles: ['ADMIN'] } },
       params: { _id: '1' },
